@@ -48,10 +48,7 @@
 (def step-height (/ grid-height 4))
 (def border-width 1)
 
-"Szeretnék egy olyan gridet amiben megadható mennyi egy lépés?"
-"Hogy csináljuk majd a kerekítést?"
-"El kell mentenünk mennyi a left és a top. Mikor a következőhöz áll közelebb akkor módosítjuk őket."
-"Tároljuk a left-temporaryt meg a right-temporaryt"
+
 
 (defn abs [n] (max n (- 0 n)))
 
