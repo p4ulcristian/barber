@@ -28,90 +28,6 @@
                                       nil)})])))
 
 
-(defn todo-item
-  []
-  (let [editing (reagent/atom false)]
-    (fn [{:keys [id done title]}]
-      [:li {:class (str (when done "completed ")
-                        (when @editing "editing"))}
-        [:div.view
-          [:input.toggle
-            {:type "checkbox"
-             :checked done
-             :on-change #(dispatch [:toggle-done id])}]
-          [:label
-            {:on-double-click #(reset! editing true)}
-            title]
-          [:button.destroy
-            {:on-click #(dispatch [:delete-todo id])}]]
-        (when @editing
-          [todo-input
-            {:class "edit"
-             :title title
-             :on-save #(if (seq %)
-                          (dispatch [:save id %])
-                          (dispatch [:delete-todo id]))
-             :on-stop #(reset! editing false)}])])))
-
-
-(defn task-list
-  []
-  (let [visible-todos @(subscribe [:visible-todos])
-        all-complete? @(subscribe [:all-complete?])]
-      [:section#main
-        [:input#toggle-all
-          {:type "checkbox"
-           :checked all-complete?
-           :on-change #(dispatch [:complete-all-toggle])}]
-        [:label
-          {:for "toggle-all"}
-          "Mark all as complete"]
-        [:ul#todo-list
-          (for [todo  visible-todos]
-            ^{:key (:id todo)} [todo-item todo])]]))
-
-
-(defn footer-controls
-  []
-  (let [[active done] @(subscribe [:footer-counts])
-        showing       @(subscribe [:showing])
-        a-fn          (fn [filter-kw txt]
-                        [:a {:class (when (= filter-kw showing) "selected")
-                             :href (str "#/" (name filter-kw))} txt])]
-    [:footer#footer
-     [:span#todo-count
-      [:strong active] " " (case active 1 "item" "items") " left"]
-     [:ul#filters
-      [:li (a-fn :all    "All")]
-      [:li (a-fn :active "Active")]
-      [:li (a-fn :done   "Completed")]]
-     (when (pos? done)
-       [:button#clear-completed {:on-click #(dispatch [:clear-completed])}
-        "Clear completed"])]))
-
-
-(defn task-entry
-  []
-  [:header#header
-    [:h3.uk-text-center "Todos"]
-    [todo-input
-      {:id "new-todo"
-       :placeholder "What needs to be done?"
-       :on-save #(when (seq %)
-                    (dispatch [:add-todo %]))}]])
-
-
-(defn todo-app
-  []
-  [:div.uk-padding-small
-   [:section#todoapp
-    [task-entry]
-    (when (seq @(subscribe [:todos]))
-      [task-list])
-    [footer-controls]]
-   [:footer#info
-    [:p "Double-click to edit a todo"]]])
-
 
 
 
@@ -125,7 +41,7 @@
 
 
 (def grid-width 80)
-(def grid-height 100)
+(def grid-height 72)
 (def step-height (/ grid-height 4))
 (def border-width 1)
 
@@ -153,8 +69,6 @@
 
 
     [final-left final-top]))
-
-
 
 
 (defn one-event [id]
@@ -202,31 +116,35 @@
           ;(str @dragged?)])})))
 
 
+
+
+
 (defn calendar []
-  (let [the-rows (range 9)
-        the-columns (range 48)]
+  (let [all-columns (range 9)
+        all-rows (range 48)]
     (reagent/create-class
      {;:component-did-mount #(do)
                               ;(add-event-listener "container" "click" (fn [a] (.log js/console (str "hello: " (js->clj a)))))
                               ;(dispatch [:init-calendar "container"]))
       :reagent-render
        (fn []
-           [:div#container {:style {:display "flex"  :z-index 40 :width "content"}}
-             (map (fn [a] (-> ^{:key a}[:div (map-indexed (fn [i b] (-> ^{:key b}
-                                                                         [:div
-                                                                          {:style {:width (str (- grid-width border-width)
-                                                                                               "px")
-                                                                                   :height (str (- step-height border-width)
-                                                                                                "px")
-                                                                                   :border-right (str border-width "px solid rgba(0, 0, 0, 0.3)")
-                                                                                   :border-top (if
-                                                                                                 (= 0 (mod i 4))
-                                                                                                 (str border-width "px solid rgba(0, 0, 0, 0.3)")
-                                                                                                 (str border-width "px solid rgba(0, 0, 0, 0.1)"))}}]))
-                                                                ;(str b a)]))
-                                                  the-columns)]))
-                  the-rows)
-             [one-event "box"]])})))
+           [:div {:style {:display "flex"}}
+            [:div (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height}}
+                                                 %2])
+                               all-rows)]
+            [:div#container.uk-inline {:style {:display "flex"  :z-index 40 :width "content"}}
+             (map-indexed (fn [row-i a]
+                              (-> ^{:key a}[:div (map-indexed (fn [i b] (-> ^{:key b}[:div
+                                                                                      {:style {:background (if (= 0 (mod row-i 2)) "white" "rgba(0, 0, 0, 0.2)")
+                                                                                               :width (str (- grid-width border-width) "px")
+                                                                                               :height (str (- step-height border-width) "px")
+                                                                                               :border-right (str border-width "px solid rgba(0, 0, 0, 0.3)")
+                                                                                               :border-top (if (= 0 (mod i 4))
+                                                                                                             (str border-width "px solid rgba(0, 0, 0, 0.3)")
+                                                                                                             (str border-width "px solid rgba(0, 0, 0, 0.1)"))}}]))
+                                                              all-rows)]))
+                          all-columns)
+             [one-event "box"]]])})))
 
 
 
@@ -275,8 +193,8 @@
                      {:on-click #(dispatch [:ws-server-time])}
                     "Test Websocket"]]]]
 
-               [:ul
-                [todo-app]]]]])})))
+               [:ul]]]])})))
+                ;[todo-app]]]]])})))
 
 (defn current-page []
   (fn []
