@@ -80,39 +80,48 @@
     (reagent/create-class
       {:component-did-mount #(do (add-event-listener (get-el id)
                                                      "mousedown" (fn [a] (reset! dragged? true)))
-                                 (add-event-listener js/window  "mouseup" (fn [a] (do
-                                                                                    ;(.log js/console (str (round-to-grid @left @top @left-temporary @top-temporary)))
-                                                                                    (reset! dragged? false)
-                                                                                    (let [rounded (round-to-grid @left-temporary @top-temporary)]
-                                                                                      (anim-to (get-el id)
-                                                                                              0.2
-                                                                                              {:x (reset! left-temporary (first rounded))
-                                                                                               :y (reset! top-temporary (second rounded))})))))
+                                 (add-event-listener js/window  "mouseup" (fn [a] (reset! dragged? false)))
+
                                  (add-event-listener js/window "mousemove" (fn [a] (if @dragged?
-                                                                                     (do
-                                                                                       (reset! left-temporary (+ @left-temporary (.-movementX a)))
-                                                                                       (reset! top-temporary (+ @top-temporary (.-movementY a)))
-                                                                                       (let [rounded (round-to-grid @left-temporary @top-temporary)]
-                                                                                         (anim-to (get-el id)
-                                                                                                  0.2
-                                                                                                  {:ease (.config js/Back.easeOut 1.7),
-                                                                                                   :x (first rounded)
-                                                                                                   :y (second rounded)})))))))
+                                                                                     (let [rect (.getBoundingClientRect (.getElementById js/document "container"))
+                                                                                           rect-width (.-width rect)
+                                                                                           rect-height (.-height rect)
+                                                                                           new-left (+ @left-temporary (.-movementX a))
+                                                                                           new-top (+ @top-temporary (.-movementY a))]
+                                                                                       (.log js/console (str (if
+                                                                                                               (and (< new-left rect-width)
+                                                                                                                    (< new-top rect-height))
+                                                                                                               true false)))
+                                                                                       (if
+                                                                                         (and (< new-left (- rect-width grid-width))
+                                                                                              (< 0 new-left)
+                                                                                              (< new-top (- rect-height grid-height))
+                                                                                              (< 0 new-top))
+                                                                                         (do
+                                                                                           (reset! left-temporary new-left)
+                                                                                           (reset! top-temporary new-top)
+                                                                                           (let [rounded (round-to-grid @left-temporary @top-temporary)]
+                                                                                             (anim-to (get-el id)
+                                                                                                      0.2
+                                                                                                      {:ease (.config js/Back.easeOut 1.7),
+                                                                                                       :x (first rounded)
+                                                                                                       :y (second rounded)})))))))))
 
        :reagent-render
        (fn [id]
-         [:div {:id id
-                ;:on-click #(anim-to (get-el id) 1 {:x 500})
-                :style {:left (+ 1 @left) :top (+ 1 @top)
-                        :position "absolute" :background "red"
-                        :border-bottom-right-radius "5px"
-                        ;:border-top-right-radius "10px"
-                        :width (str (- (- grid-width border-width)
-                                       4)
-                                    "px")
-                        :height (str (- (- grid-height border-width)
-                                        3)
-                                     "px")}}])})))
+         [:div.one-event {:class (if @dragged? "active" "")
+                          :id id
+                          :style {:left (+ 1 @left) :top (+ 1 @top)
+                                  :position "absolute" :background "red"
+                                  :border-bottom-right-radius "5px"
+                                  :box-shadow (if @dragged? "3px 4px 5px 0px rgba(0,0,0,0.75)" "")
+                                  ;:border-top-right-radius "10px"
+                                  :width (str (- (- grid-width border-width)
+                                                 4)
+                                              "px")
+                                  :height (str (- (- grid-height border-width)
+                                                  3)
+                                               "px")}}])})))
           ;(str @dragged?)])})))
 
 
