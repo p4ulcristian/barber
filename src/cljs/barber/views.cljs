@@ -84,7 +84,9 @@
 
 
 (defn one-event [id start-left start-top start-height]
-  (let [mouse-up-listener (atom nil)
+  (let [rect (atom nil)
+
+        mouse-up-listener (atom nil)
         mouse-move-listener (atom nil)
         calc-left (* start-left grid-width)
         calc-top (* start-top step-height)
@@ -95,32 +97,56 @@
         left (atom calc-left)
         top (atom calc-top)
         dragged? (atom false)
+        remove-mouse-move (fn [] (remove-event-listener js/window "mousemove" @mouse-move-listener))
+        remove-mouse-up (fn [] (remove-event-listener js/window "mouseup" @mouse-up-listener))
+
+        stop-drag (fn []
+                      (remove-mouse-move)
+                      (remove-mouse-up)
+                      (let [rounded (round-to-grid @left @top)]
+                           (reset! left (first rounded))
+                           (reset! top (second rounded))
+                           (reset! left-temporary @left)
+                           (reset! top-temporary @top))
+                      (reset! dragged? false))
         drag (fn [a]
-               (if @dragged?
-                 (let [rect (.getBoundingClientRect (.getElementById js/document "container"))
-                       rect-width (.-width rect)
-                       rect-height (.-height rect)
-                       new-left (+ @left-temporary (.-movementX a))
-                       new-top (+ @top-temporary (.-movementY a))]
-                   (if
-                     (and (<= new-left (- rect-width grid-width))
-                          (<= 0 new-left)
-                          (<= new-top (- rect-height grid-height))
-                          (<= 0 new-top))
-                     (do
-                       (reset! left-temporary new-left)
-                       (reset! top-temporary new-top)
-                       (let [rounded (round-to-grid @left-temporary @top-temporary)]
-                         (reset! left (first rounded))
-                         (reset! top (second rounded))))
-                     (.log js/console "Nem sikerült")))))
+                 (if @dragged?
+                   (let [container (get-el "container")
+                         rect-width (.-width @rect)
+                         rect-height (.-scrollHeight container)
+                         new-left (+ @left-temporary (.-movementX a))
+                         new-top (+ @top-temporary (.-movementY a))]
+
+                        (let [rounded [@left-temporary @top-temporary]]
+                             (reset! left-temporary new-left)
+                             ;If left is out of boundaries
+                             (if
+                               (and (<= new-left (- rect-width grid-width))
+                                    (<= 0 new-left))
+                               (reset! left (first rounded))
+                               (if
+                                 (<= new-left (- rect-width grid-width))
+                                 (reset! left 0)
+                                 (reset! left (- rect-width grid-width))))
+                             ;If top is out of boundaries
+                             (reset! top-temporary new-top)
+                             ;(.log js/console (str (.-clientX a)))
+                             (if
+                               (and (<= new-top (- rect-height grid-height))
+                                    (<= 0 new-top))
+                               (reset! top (second rounded))
+                               (do
+                                 (if (<= new-top (- rect-height @height))
+                                   (reset! top 0))
+                                 (if (<= 0 new-top)
+                                     (reset! top (- rect-height @height)))))))))
+
 
 
         resize (fn [a]
                  (if @dragged?
-                   (let [rect (.getBoundingClientRect (.getElementById js/document "container"))
-                         rect-width (.-width rect)
-                         rect-height (.-height rect)
+                   (let [rect-width (.-width @rect)
+                         rect-height (.-height @rect)
                          new-height (+ @height-temporary (.-movementY a))]
                      ;(round-to-height new-height)
                      (reset! height-temporary new-height)
@@ -128,13 +154,8 @@
 
 
 
-        remove-mouse-move (fn [] (remove-event-listener js/window "mousemove" @mouse-move-listener))
-        remove-mouse-up (fn [] (remove-event-listener js/window "mouseup" @mouse-up-listener))
-        stop-drag (fn [a]
-                    (remove-mouse-move)
-                    (remove-mouse-up)
-                    (reset! dragged? false)
-                    (.log js/console "removeolva"))
+
+
 
         stop-resize (fn [a]
                       (remove-mouse-move)
@@ -147,7 +168,6 @@
                (reset! dragged? true)
                (reset! mouse-up-listener stop-drag)
                (reset! mouse-move-listener drag)
-               (.log js/console "hozzáadva")
                (add-event-listener js/window "mousemove" @mouse-move-listener)
                (add-event-listener js/window  "mouseup" @mouse-up-listener))
 
@@ -161,28 +181,31 @@
                             (add-event-listener js/window  "mouseup" @mouse-up-listener))]
 
     (reagent/create-class
-      {:component-did-mount #(do (add-event-listener
-                                   (get-el id) "mousedown"
-                                   drag)
-                                 (add-event-listener
-                                   (get-el (str id "-resize"))
-                                   "mousedown"
-                                   mouse-down-resize))
+      {:component-did-mount #(do
+                               (reset! rect (.getBoundingClientRect (get-el "container")))
+                               (add-event-listener
+                                 (get-el id) "mousedown"
+                                 drag)
+                               (add-event-listener
+                                 (get-el (str id "-resize"))
+                                 "mousedown"
+                                 mouse-down-resize))
 
        :reagent-render
        (fn [id]
          [:div.one-event
           {:class (if @dragged? "active" "")
            :id id
-           :style {:transition "0.1s easeInCirc"
-                   :z-index (if @dragged? 1000 1)
-                   :left (+ 1 @left) :top (+ 1 @top)
+           :style {:z-index (if @dragged? 1000 1)
+                   :transform (str "translate(" (+ 1 @left) "px," (+ 1 @top) "px)")
                    :position "absolute" :background "rgb(255, 204, 71)"
                    :border-bottom-right-radius "5px"
-                   :box-shadow (if @dragged? "4px 2px 5px 5px rgba(0,0,0,0.75)" "")
+                   :opacity (if @dragged? 1 1)
                    ;:border-top-right-radius "10px"
                    :width (str (- (- grid-width border-width) 4) "px")
                    :height (str (- @height 3) "px")}}
+          [:div (str @top ":" @left)]
+          [:div (str @top-temporary ":" @left-temporary)]
           [:div {:id (str id "-resize")
                  :style {:background "red" :height "5px" :width (- (- grid-width border-width) 4)
                          :bottom 0 :position "absolute" :z-index 1000}}]])})))
@@ -208,22 +231,23 @@
             [:div (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height}}
                                                  %2])
                                all-rows)]
-            [:div#container.uk-inline.noselect {:style {:display "flex"  :z-index 40 :width "content"}}
+            [:div#container.uk-inline.noselect {:style {:display "flex"  :z-index 40}}
              (map-indexed (fn [row-i a]
                               (-> ^{:key a}[:div (map-indexed (fn [i b] (-> ^{:key b}[:div
-                                                                                      {:style {:background (if (= 0 (mod row-i 3))  "rgba(0, 0, 0, 0.2)" "white")
+                                                                                      {:style {:background (if (= 0 (mod row-i 3))  "#ccc" "white")
                                                                                                :width (str (- grid-width border-width) "px")
                                                                                                :height (str (- step-height border-width) "px")
-                                                                                               :border-right (str border-width "px solid rgba(0, 0, 0, 0.3)")
+                                                                                               :border-right (str border-width "px solid lightgrey")
                                                                                                :border-top (if (= 0 (mod i 4))
-                                                                                                             (str border-width "px solid rgba(0, 0, 0, 0.3)")
-                                                                                                             (str border-width "px solid rgba(0, 0, 0, 0.1)"))}}]))
+                                                                                                             (str border-width "px solid lightgrey")
+                                                                                                             (str border-width "px solid lightgrey"))}}]))
                                                               all-rows)]))
                           all-columns)
+             ;[:div#event-container {:style {:position "absolute" :height "100%" :width "100%" :background "rgba(0,0,0,0.2)"}}]
              [one-event "box" 0 0 2]
              [one-event "box2" 8 0 3]
-             [one-event "box3" 0 44 4]
-             [one-event "box4" 8 44 5]]])})))
+             [one-event "box3" 0 44 4]]])})))
+             ;[one-event "box4" 8 44 5]]])})))
 
 
 
@@ -293,4 +317,7 @@
                  [:a {:href "/login"} [:button.uk-button.uk-button-primary "Login"]]
                  [:a.uk-margin-small-left {:href "/logout"} [:button.uk-button.uk-button-danger "Logout"]]]
                 [home-page]])
-      [:div.uk-align-center [calendar]])))
+      [:div.uk-align-center
+       [:div {:style {:height "100px"}}]
+       [:div.uk-padding-large
+        [calendar]]])))

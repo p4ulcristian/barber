@@ -40,8 +40,8 @@
         (reagent/after-render clerk/after-render!)
         (dispatch [:add-to-db {:current-page current-page
                                :route-params route-params}])
-        (clerk/navigate-page! path)
-        ))
+        (clerk/navigate-page! path)))
+
     :path-exists?
     (fn [path]
       (boolean (reitit/match-by-path router path)))})
