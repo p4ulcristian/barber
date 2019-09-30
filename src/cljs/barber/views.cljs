@@ -81,114 +81,232 @@
       height-top)))
 
 
-
+(def scroll-interval (atom nil))
 
 (defn one-event [id start-left start-top start-height]
   (let [rect (atom nil)
 
-        mouse-up-listener (atom nil)
-        mouse-move-listener (atom nil)
+        drag-end-listener (atom nil)
+        drag-move-listener (atom nil)
+        scroll-listener (atom nil)
+        not-real-scroll? (atom false)
+        dragged? (atom false)
+
+
+        last-pos (atom [0 0])
+        last-scroll-pos (atom 0)
         calc-left (* start-left grid-width)
         calc-top (* start-top step-height)
-        left-temporary (atom calc-left)
-        top-temporary (atom calc-top)
+        left-temporary (atom 0)
+        top-temporary (atom 0)
         height-temporary (atom (* start-height step-height))
         height (atom (* start-height step-height))
         left (atom calc-left)
         top (atom calc-top)
-        dragged? (atom false)
-        remove-mouse-move (fn [] (remove-event-listener js/window "mousemove" @mouse-move-listener))
-        remove-mouse-up (fn [] (remove-event-listener js/window "mouseup" @mouse-up-listener))
-
-        stop-drag (fn []
-                      (remove-mouse-move)
-                      (remove-mouse-up)
-                      (let [rounded (round-to-grid @left @top)]
-                           (reset! left (first rounded))
-                           (reset! top (second rounded))
-                           (reset! left-temporary @left)
-                           (reset! top-temporary @top))
-                      (reset! dragged? false))
-        drag (fn [a]
-                 (if @dragged?
-                   (let [container (get-el "container")
-                         rect-width (.-width @rect)
-                         rect-height (.-scrollHeight container)
-                         new-left (+ @left-temporary (.-movementX a))
-                         new-top (+ @top-temporary (.-movementY a))]
-
-                        (let [rounded [@left-temporary @top-temporary]]
-                             (reset! left-temporary new-left)
-                             ;If left is out of boundaries
-                             (if
-                               (and (<= new-left (- rect-width grid-width))
-                                    (<= 0 new-left))
-                               (reset! left (first rounded))
-                               (if
-                                 (<= new-left (- rect-width grid-width))
-                                 (reset! left 0)
-                                 (reset! left (- rect-width grid-width))))
-                             ;If top is out of boundaries
-                             (reset! top-temporary new-top)
-                             ;(.log js/console (str (.-clientX a)))
-                             (if
-                               (and (<= new-top (- rect-height grid-height))
-                                    (<= 0 new-top))
-                               (reset! top (second rounded))
-                               (do
-                                 (if (<= new-top (- rect-height @height))
-                                   (reset! top 0))
-                                 (if (<= 0 new-top)
-                                     (reset! top (- rect-height @height)))))))))
 
 
+        remove-mouse-move (fn [] (remove-event-listener js/window "mousemove" @drag-move-listener))
+        remove-mouse-up (fn [] (remove-event-listener js/window "mouseup" @drag-end-listener))
+        remove-touch-move (fn [] (remove-event-listener js/window "touchmove" @drag-move-listener))
+        remove-touch-end (fn [] (remove-event-listener js/window "touchend" @drag-end-listener))
+        remove-scroll (fn [] (remove-event-listener js/window "scroll" @scroll-listener))
+        remove-all (fn []
+                       (do
+                         (remove-mouse-move)
+                         (remove-mouse-up)
+                         (remove-touch-move)
+                         (remove-touch-end)
+                         (remove-scroll)))
 
-        resize (fn [a]
-                 (if @dragged?
-                   (let [rect-width (.-width @rect)
-                         rect-height (.-height @rect)
-                         new-height (+ @height-temporary (.-movementY a))]
-                     ;(round-to-height new-height)
-                     (reset! height-temporary new-height)
-                     (reset! height (round-to-height @height-temporary)))))
 
+        is-touch? (fn [event] (clojure.string/includes? (.-type event) "touch"))
+        get-pos (fn [event]
+                    (if
+                      (is-touch? event)
+                      [(.-pageX (aget (.-touches event) 0))
+                       (.-pageY (aget (.-touches event) 0))]
+                      [(.-pageX event)
+                       (.-pageY event)]))
+        scroll-event (fn [a]
+                         (if (and @dragged? (not @not-real-scroll?))
+                           (do
+                               (reset! top (+ @top (- (.-scrollTop (.-documentElement js/document))
+                                                      @last-scroll-pos)))
+                               ;(reset! top-temporary (+ @top-temporary (- (.-scrollTop (.-documentElement js/document)) @last-scroll-pos)))
+                               (reset! last-pos (assoc @last-pos 1 (+ (second @last-pos)
+                                                                      (- (.-scrollTop (.-documentElement js/document))
+                                                                         @last-scroll-pos))))
+                               (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document))))))
 
 
 
 
 
         stop-resize (fn [a]
-                      (remove-mouse-move)
-                      (remove-mouse-up)
-                      (reset! dragged? false)
-                      (.log js/console "removeolva"))
+                        (remove-all)
+                        (reset! dragged? false))
 
+        resize (fn [a]
+                   (.stopPropagation a)
+                   (if @dragged?
+                     (let [rect-width (.-width @rect)
+                           rect-height (.-height @rect)
+                           new-height (+ @height-temporary (-
+                                                             (if (is-touch? a)
+                                                                 (.-pageY (aget (.-touches a) 0))
+                                                                 (.-pageY a))
+                                                             (second @last-pos)))]
 
-        drag (fn [a]
-               (reset! dragged? true)
-               (reset! mouse-up-listener stop-drag)
-               (reset! mouse-move-listener drag)
-               (add-event-listener js/window "mousemove" @mouse-move-listener)
-               (add-event-listener js/window  "mouseup" @mouse-up-listener))
+                       (reset! last-pos (get-pos a))
+                       (reset! height-temporary new-height)
+                       (reset! height (round-to-height @height-temporary)))))
 
         mouse-down-resize (fn [a]
                             (.stopPropagation a)
                             (reset! dragged? true)
-                            (reset! mouse-up-listener stop-resize)
-                            (reset! mouse-move-listener resize)
-                            (.log js/console "hozzáadva resize")
-                            (add-event-listener js/window "mousemove" @mouse-move-listener)
-                            (add-event-listener js/window  "mouseup" @mouse-up-listener))]
+                            (reset! last-pos (get-pos a))
+                            (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))
+                            (reset! drag-end-listener stop-resize)
+                            (reset! drag-move-listener resize)
+                            (if (is-touch? a)
+                              (do
+                                (add-event-listener js/window "touchmove" @drag-move-listener)
+                                (add-event-listener js/window  "touchend" @drag-end-listener)
+                                (add-event-listener js/window  "touchcancel" @drag-end-listener))
+                              (do
+                                (add-event-listener js/window "mousemove" @drag-move-listener)
+                                (add-event-listener js/window  "mouseup" @drag-end-listener))))
+
+
+        scroll-if-close (fn [a new-top] (let [inner-height (.-innerHeight js/window)
+                                              how-much-scroll (- inner-height new-top)]
+                                             (if @scroll-interval (.clearInterval js/window @scroll-interval))
+                                             (do
+                                               (reset! not-real-scroll? true)
+                                               (reset! scroll-interval
+                                                       (.setInterval js/window
+                                                                     #(do
+                                                                        ;(.log js/console (str "muhaha " @top))
+                                                                        (cond
+                                                                          (< how-much-scroll 100) (do (set!
+                                                                                                        (.-scrollTop (.-documentElement js/document))
+                                                                                                        (+ (.-scrollTop (.-documentElement js/document)) 10))
+                                                                                                      (reset! top (+ @top 10))
+                                                                                                      (reset! last-pos (assoc @last-pos 1 (+ (second @last-pos) 10))))
+                                                                          (< new-top 100) (do (set!
+                                                                                                (.-scrollTop (.-documentElement js/document))
+                                                                                                (- (.-scrollTop (.-documentElement js/document)) 10))
+                                                                                              (reset! top (- @top 10))
+                                                                                              (reset! last-pos (assoc @last-pos 1 (- (second @last-pos) 10))))
+                                                                          :else (do
+                                                                                  (reset! not-real-scroll? false)
+                                                                                  (.clearInterval js/window @scroll-interval))))
+                                                                     30)))))
+
+
+
+
+
+
+        on-pan-end (fn [event]
+                       (reset! dragged? false)
+                       (if @scroll-interval (.clearInterval js/window @scroll-interval))
+                       (remove-all)
+                       (let [rounded (round-to-grid @left @top)]
+                            (reset! left (first rounded))
+                            (reset! top (second rounded))
+                            (reset! left-temporary @left)
+                            (reset! top-temporary @top)))
+
+
+        on-pan (fn [a]
+                   (if @dragged?
+                     (let
+                       [container (get-el "container")
+                        rect-width (.-width @rect)
+                        rect-height (.-scrollHeight container)
+                        position (get-pos a)
+                        new-left (first position)
+                        new-top (second position)]
+                       ;(.preventDefault a)
+                       (scroll-if-close a (if
+                                            (clojure.string/includes? (.-type a) "touch")
+                                            (.-clientY (aget (.-touches a) 0))
+                                            (.-clientY a)))
+                       (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))
+                       (reset! left (- @left
+                                       (- (first @last-pos)
+                                          new-left)))
+                       (reset! top (- @top
+                                      (- (second @last-pos)
+                                         new-top)))
+                       ;If left is out of boundaries
+                       (reset! last-pos [new-left new-top])
+                       (comment
+                         (if
+                           (and (<= new-left (- rect-width grid-width))
+                                (<= 0 new-left))
+                           (reset! left (first rounded))
+                           (if
+                             (<= new-left (- rect-width grid-width))
+                             (reset! left 0)
+                             (reset! left (- rect-width grid-width))))
+                         ;If top is out of boundaries
+                         (reset! top-temporary new-top)
+                         ;(.log js/console (str (.-clientX a)))
+                         (if
+                           (and (<= new-top (- rect-height @height))
+                                (<= 0 new-top))
+                           (reset! top (second rounded))
+                           (do
+                             (if (<= new-top (- rect-height @height))
+                               (reset! top 0))
+                             (if (<= 0 new-top)
+                               (reset! top (- rect-height @height)))))))))
+
+        on-pan-start (fn [event]
+                        (let [position (get-pos event)]; (reset! dragging? true)
+                          (reset! dragged? true)
+                          (.stopPropagation event)
+                          (reset! last-pos position)
+                          (reset! drag-end-listener on-pan-end)
+                          (reset! drag-move-listener on-pan)
+                          (reset! scroll-listener scroll-event)
+
+                          (if (is-touch? event)
+                            (do
+                              (add-event-listener js/window "touchmove" @drag-move-listener)
+                              (add-event-listener js/window  "touchend" @drag-end-listener)
+                              (add-event-listener js/window  "touchcancel" @drag-end-listener))
+                            (do
+                              (add-event-listener js/window "mousemove" @drag-move-listener)
+                              (add-event-listener js/window  "mouseup" @drag-end-listener)
+                              (add-event-listener js/window "scroll" @scroll-listener)))
+                          false))]
+
+
+                         ;(.log js/console "hey start"))
+
+
+
+
 
     (reagent/create-class
       {:component-did-mount #(do
                                (reset! rect (.getBoundingClientRect (get-el "container")))
                                (add-event-listener
+                                 (get-el id) "touchstart"
+                                 on-pan-start)
+                               (add-event-listener
                                  (get-el id) "mousedown"
-                                 drag)
+                                 on-pan-start)
                                (add-event-listener
                                  (get-el (str id "-resize"))
                                  "mousedown"
+                                 mouse-down-resize)
+                               (add-event-listener
+                                 (get-el (str id "-resize"))
+                                 "touchstart"
                                  mouse-down-resize))
 
        :reagent-render
@@ -196,7 +314,11 @@
          [:div.one-event
           {:class (if @dragged? "active" "")
            :id id
-           :style {:z-index (if @dragged? 1000 1)
+           :style {:touch-action "none"
+                   :z-index (if @dragged? 1000 1)
+                   :cursor  (if @dragged? "grabbing" "grab")
+                   :left 0
+                   :top 0
                    :transform (str "translate(" (+ 1 @left) "px," (+ 1 @top) "px)")
                    :position "absolute" :background "rgb(255, 204, 71)"
                    :border-bottom-right-radius "5px"
@@ -204,10 +326,11 @@
                    ;:border-top-right-radius "10px"
                    :width (str (- (- grid-width border-width) 4) "px")
                    :height (str (- @height 3) "px")}}
-          [:div (str @top ":" @left)]
-          [:div (str @top-temporary ":" @left-temporary)]
+          [:div] ;(str @top ":" @left)]
+          [:div] ;(str @top-temporary ":" @left-temporary)]
           [:div {:id (str id "-resize")
-                 :style {:background "red" :height "5px" :width (- (- grid-width border-width) 4)
+                 :style {:cursor "ns-resize"
+                         :background "red" :height "5px" :width (- (- grid-width border-width) 4)
                          :bottom 0 :position "absolute" :z-index 1000}}]])})))
 
 
@@ -220,7 +343,7 @@
 
 (defn calendar []
   (let [all-columns (range 9)
-        all-rows (range 48)]
+        all-rows (range 1000)]
     (reagent/create-class
      {;:component-did-mount #(do)
                               ;(add-event-listener "container" "click" (fn [a] (.log js/console (str "hello: " (js->clj a)))))
