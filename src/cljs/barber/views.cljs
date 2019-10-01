@@ -178,30 +178,62 @@
                                 (add-event-listener js/window  "mouseup" @drag-end-listener))))
 
 
-        scroll-if-close (fn [a new-top] (let [inner-height (.-innerHeight js/window)
-                                              how-much-scroll (- inner-height new-top)]
-                                             (if @scroll-interval (.clearInterval js/window @scroll-interval))
-                                             (do
-                                               (reset! not-real-scroll? true)
-                                               (reset! scroll-interval
-                                                       (.setInterval js/window
-                                                                     #(do
-                                                                        ;(.log js/console (str "muhaha " @top))
-                                                                        (cond
-                                                                          (< how-much-scroll 100) (do (set!
-                                                                                                        (.-scrollTop (.-documentElement js/document))
-                                                                                                        (+ (.-scrollTop (.-documentElement js/document)) 10))
-                                                                                                      (reset! top (+ @top 10))
-                                                                                                      (reset! last-pos (assoc @last-pos 1 (+ (second @last-pos) 10))))
-                                                                          (< new-top 100) (do (set!
-                                                                                                (.-scrollTop (.-documentElement js/document))
-                                                                                                (- (.-scrollTop (.-documentElement js/document)) 10))
-                                                                                              (reset! top (- @top 10))
-                                                                                              (reset! last-pos (assoc @last-pos 1 (- (second @last-pos) 10))))
-                                                                          :else (do
-                                                                                  (reset! not-real-scroll? false)
-                                                                                  (.clearInterval js/window @scroll-interval))))
-                                                                     30)))))
+        scroll-if-close (fn [a mouse-top mouse-left new-left rect-left scroll-width rect-width rect-height]
+                            (let [inner-height (.-innerHeight js/window)
+                                  inner-width (.-innerWidth js/window)
+                                  how-much-scroll-y (- inner-height mouse-top)
+                                  how-much-scroll-x (- inner-width mouse-left)
+                                  px-number 2]
+                                 (if @scroll-interval (.clearInterval js/window @scroll-interval))
+
+
+                                 (do
+                                   (reset! not-real-scroll? true)
+                                   (reset! scroll-interval
+                                           (.setInterval js/window
+                                                         #(do
+                                                            (.log js/console (str  (.-scrollLeft (get-el "scroll-container")) " - " (- scroll-width grid-width)))
+                                                            (cond
+                                                              (< how-much-scroll-y 100) (do
+                                                                                          ;(.log js/console "le")
+                                                                                          (set!
+                                                                                            (.-scrollTop (.-documentElement js/document))
+                                                                                            (+ (.-scrollTop (.-documentElement js/document)) px-number))
+                                                                                          (if (> (- rect-height @height)
+                                                                                                 (+ @top px-number))
+                                                                                            (reset! top (+ @top px-number)))
+                                                                                          (reset! last-pos (assoc @last-pos 1 (+ (second @last-pos) px-number))))
+                                                              (< mouse-top 100) (do
+                                                                                  ;(.log js/console "fel")
+                                                                                  (set!
+                                                                                    (.-scrollTop (.-documentElement js/document))
+                                                                                    (- (.-scrollTop (.-documentElement js/document)) px-number))
+                                                                                  (if (< 0 (- @top px-number))
+                                                                                    (reset! top (- @top px-number)))
+                                                                                  (reset! last-pos (assoc @last-pos 1 (- (second @last-pos) px-number))))
+                                                              (> mouse-left (- (+ rect-left rect-width) 50)) (do
+                                                                                                               ;(.log js/console "jonn")
+                                                                                                               (set!
+                                                                                                                 (.-scrollLeft (get-el "scroll-container"))
+                                                                                                                 (+ (.-scrollLeft (get-el "scroll-container")) px-number))
+                                                                                                               (if (< (+ @left px-number)
+                                                                                                                      (- scroll-width grid-width))
+                                                                                                                 (reset! left (+ @left px-number)))
+                                                                                                               (reset! last-pos (assoc @last-pos 0 (+ (first @last-pos) px-number))))
+
+                                                              (< mouse-left (+ rect-left 50))  (do
+                                                                                                 ;(.log js/console (str "bal " mouse-left " < " (+ rect-left 50)))
+                                                                                                 (set!
+                                                                                                   (.-scrollLeft (get-el "scroll-container"))
+                                                                                                   (- (.-scrollLeft (get-el "scroll-container")) px-number))
+                                                                                                 (if (> (- @left px-number) 0)
+                                                                                                   (reset! left (- @left px-number)))
+                                                                                                 (reset! last-pos (assoc @last-pos 0 (- (first @last-pos) px-number))))
+
+                                                              :else (do
+                                                                      (reset! not-real-scroll? false)
+                                                                      (.clearInterval js/window @scroll-interval))))
+                                                         0.1)))))
 
 
 
@@ -216,53 +248,78 @@
                             (reset! left (first rounded))
                             (reset! top (second rounded))
                             (reset! left-temporary @left)
-                            (reset! top-temporary @top)))
+                            (reset! top-temporary @top)
+                            (.log js/console (str "sor: " (/ (first rounded) grid-width)
+                                                  " oszlop:  " (/ (second rounded) step-height)
+                                                  " hossz: " (* 15 (/ @height step-height)) " perc"))))
 
 
         on-pan (fn [a]
                    (if @dragged?
                      (let
                        [container (get-el "container")
-                        rect-width (.-width @rect)
-                        rect-height (.-scrollHeight container)
+                        scroll-width (.-scrollWidth container)
+                        rect-width (.-clientWidth container)
+                        rect-height (.-clientHeight container)
+                        rect-left (.-left @rect)
+                        rect-top (.-top @rect)
                         position (get-pos a)
-                        new-left (first position)
-                        new-top (second position)]
-                       ;(.preventDefault a)
-                       (scroll-if-close a (if
-                                            (clojure.string/includes? (.-type a) "touch")
-                                            (.-clientY (aget (.-touches a) 0))
-                                            (.-clientY a)))
+                        click-left (first position)
+                        click-top (second position)
+                        new-left (- @left (- (first @last-pos) click-left)) ;uj baloldalt a mozgatas alapjan
+                        new-top (- @top (- (second @last-pos) click-top))] ;uj fent a mozgatas alapjan]
+
                        (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))
-                       (reset! left (- @left
-                                       (- (first @last-pos)
-                                          new-left)))
-                       (reset! top (- @top
-                                      (- (second @last-pos)
-                                         new-top)))
-                       ;If left is out of boundaries
-                       (reset! last-pos [new-left new-top])
-                       (comment
-                         (if
-                           (and (<= new-left (- rect-width grid-width))
-                                (<= 0 new-left))
-                           (reset! left (first rounded))
+                       (scroll-if-close a
+                                        (if
+                                          (clojure.string/includes? (.-type a) "touch")
+                                          (.-clientY (aget (.-touches a) 0))
+                                          (.-clientY a))
+                                        (if
+                                          (clojure.string/includes? (.-type a) "touch")
+                                          (.-clientX (aget (.-touches a) 0))
+                                          (.-clientX a))
+                                        new-left
+                                        ;new-top
+                                        rect-left
+                                        scroll-width
+                                        rect-width
+                                        rect-height)
+
+                       ;Left and Right Boundaries
+                       (if (and
+                             (<= (+ rect-left (/ grid-width 2)) (first @last-pos))
+                             (<= (first @last-pos)
+                                 (- (+ rect-left (.-clientWidth container)) (/ grid-width 2)))
+                             (<= 0 new-left)
+                             (<= new-left (- scroll-width grid-width)))
+                         (do
+
+                           (reset! left new-left))
+                           ;(scroll-if-close a click-top click-left))
+                         (do
                            (if
-                             (<= new-left (- rect-width grid-width))
-                             (reset! left 0)
-                             (reset! left (- rect-width grid-width))))
-                         ;If top is out of boundaries
-                         (reset! top-temporary new-top)
-                         ;(.log js/console (str (.-clientX a)))
-                         (if
-                           (and (<= new-top (- rect-height @height))
-                                (<= 0 new-top))
-                           (reset! top (second rounded))
-                           (do
-                             (if (<= new-top (- rect-height @height))
-                               (reset! top 0))
-                             (if (<= 0 new-top)
-                               (reset! top (- rect-height @height)))))))))
+                             (<= new-left 0)
+                             (reset! left 0))
+                           (if
+                             (<= (- scroll-width grid-width)
+                                 new-left)
+                             (reset! left (- scroll-width grid-width)))))
+
+                       ;Top and Bottom Boundaries
+
+                       (if
+                         (and
+                              (< click-top (+ rect-top (- rect-height (/ @height 2))))
+                              (> click-top (+ rect-top (/ @height 2))))
+                         (do
+                           (reset! top new-top))
+                           ;(scroll-if-close a click-top click-left))
+                         (if (<= click-top (+ rect-top (/ @height 2)))
+                           (reset! top 0)
+                           (reset! top (- rect-height @height))))
+                       (reset! last-pos [click-left click-top]))))
+
 
         on-pan-start (fn [event]
                         (let [position (get-pos event)]; (reset! dragging? true)
@@ -271,7 +328,7 @@
                           (reset! last-pos position)
                           (reset! drag-end-listener on-pan-end)
                           (reset! drag-move-listener on-pan)
-                          (reset! scroll-listener scroll-event)
+                          ;(reset! scroll-listener scroll-event)
 
                           (if (is-touch? event)
                             (do
@@ -283,10 +340,6 @@
                               (add-event-listener js/window  "mouseup" @drag-end-listener)
                               (add-event-listener js/window "scroll" @scroll-listener)))
                           false))]
-
-
-                         ;(.log js/console "hey start"))
-
 
 
 
@@ -342,34 +395,35 @@
 
 
 (defn calendar []
-  (let [all-columns (range 9)
-        all-rows (range 1000)]
+  (let [all-columns (range 10)
+        all-rows (range 70)]
     (reagent/create-class
      {;:component-did-mount #(do)
                               ;(add-event-listener "container" "click" (fn [a] (.log js/console (str "hello: " (js->clj a)))))
                               ;(dispatch [:init-calendar "container"]))
       :reagent-render
        (fn []
-           [:div {:style {:display "flex"}}
-            [:div (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height}}
+           [:div {:style {:display "flex" :width "100%" :padding "30px"}}
+            [:div (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
                                                  %2])
                                all-rows)]
-            [:div#container.uk-inline.noselect {:style {:display "flex"  :z-index 40}}
-             (map-indexed (fn [row-i a]
-                              (-> ^{:key a}[:div (map-indexed (fn [i b] (-> ^{:key b}[:div
-                                                                                      {:style {:background (if (= 0 (mod row-i 3))  "#ccc" "white")
-                                                                                               :width (str (- grid-width border-width) "px")
-                                                                                               :height (str (- step-height border-width) "px")
-                                                                                               :border-right (str border-width "px solid lightgrey")
-                                                                                               :border-top (if (= 0 (mod i 4))
-                                                                                                             (str border-width "px solid lightgrey")
-                                                                                                             (str border-width "px solid lightgrey"))}}]))
-                                                              all-rows)]))
-                          all-columns)
-             ;[:div#event-container {:style {:position "absolute" :height "100%" :width "100%" :background "rgba(0,0,0,0.2)"}}]
-             [one-event "box" 0 0 2]
-             [one-event "box2" 8 0 3]
-             [one-event "box3" 0 44 4]]])})))
+            [:div#scroll-container {:style {:overflow "auto"}}
+             [:div#container.uk-inline.noselect {:style {:display "flex"  :z-index 40 :width "fit-content"}}
+              (map-indexed (fn [row-i a]
+                               (-> ^{:key a}[:div (map-indexed (fn [i b] (-> ^{:key b}[:div
+                                                                                       {:style {:background (if (= 0 (mod row-i 3))  "#ccc" "white")
+                                                                                                :width (str (- grid-width border-width) "px")
+                                                                                                :height (str (- step-height border-width) "px")
+                                                                                                :border-right (str border-width "px solid lightgrey")
+                                                                                                :border-top (if (= 0 (mod i 4))
+                                                                                                              (str border-width "px solid lightgrey")
+                                                                                                              (str border-width "px solid lightgrey"))}}]))
+                                                               all-rows)]))
+                           all-columns)
+              ;[:div#event-container {:style {:position "absolute" :height "100%" :width "100%" :background "rgba(0,0,0,0.2)"}}]
+              [one-event "box" 0 0 2]
+              [one-event "box2" 8 0 3]
+              [one-event "box3" 0 44 4]]]])})))
              ;[one-event "box4" 8 44 5]]])})))
 
 
@@ -442,5 +496,5 @@
                 [home-page]])
       [:div.uk-align-center
        [:div {:style {:height "100px"}}]
-       [:div.uk-padding-large
+       [:div
         [calendar]]])))
