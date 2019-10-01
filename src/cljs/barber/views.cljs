@@ -178,15 +178,13 @@
                                 (add-event-listener js/window  "mouseup" @drag-end-listener))))
 
 
-        scroll-if-close (fn [a mouse-top mouse-left new-left rect-left scroll-width rect-width rect-height]
+        scroll-if-close (fn [a mouse-top mouse-left rect-left scroll-width rect-width rect-height]
                             (let [inner-height (.-innerHeight js/window)
                                   inner-width (.-innerWidth js/window)
                                   how-much-scroll-y (- inner-height mouse-top)
                                   how-much-scroll-x (- inner-width mouse-left)
                                   px-number 2]
                                  (if @scroll-interval (.clearInterval js/window @scroll-interval))
-
-
                                  (do
                                    (reset! not-real-scroll? true)
                                    (reset! scroll-interval
@@ -279,8 +277,6 @@
                                           (clojure.string/includes? (.-type a) "touch")
                                           (.-clientX (aget (.-touches a) 0))
                                           (.-clientX a))
-                                        new-left
-                                        ;new-top
                                         rect-left
                                         scroll-width
                                         rect-width
@@ -395,7 +391,7 @@
 
 
 (defn calendar []
-  (let [all-columns (range 10)
+  (let [all-columns (range 30)
         all-rows (range 70)]
     (reagent/create-class
      {;:component-did-mount #(do)
@@ -403,12 +399,12 @@
                               ;(dispatch [:init-calendar "container"]))
       :reagent-render
        (fn []
-           [:div {:style {:display "flex" :width "100%" :padding "30px"}}
+           [:div.uk-width-1-1 {:style {:display "flex" :padding "50px"}}
             [:div (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
                                                  %2])
                                all-rows)]
             [:div#scroll-container {:style {:overflow "auto"}}
-             [:div#container.uk-inline.noselect {:style {:display "flex"  :z-index 40 :width "fit-content"}}
+             [:div#container.uk-inline.noselect {:style {:display "flex"  :z-index 40}}
               (map-indexed (fn [row-i a]
                                (-> ^{:key a}[:div (map-indexed (fn [i b] (-> ^{:key b}[:div
                                                                                        {:style {:background (if (= 0 (mod row-i 3))  "#ccc" "white")
