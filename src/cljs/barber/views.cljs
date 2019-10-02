@@ -93,7 +93,7 @@
         dragged? (atom false)
 
 
-        last-pos (atom [0 0])
+        last-mouse-pos (atom [0 0])
         last-scroll-pos (atom 0)
         calc-left (* start-left grid-width)
         calc-top (* start-top step-height)
@@ -133,9 +133,9 @@
                                (reset! top (+ @top (- (.-scrollTop (.-documentElement js/document))
                                                       @last-scroll-pos)))
                                ;(reset! top-temporary (+ @top-temporary (- (.-scrollTop (.-documentElement js/document)) @last-scroll-pos)))
-                               (reset! last-pos (assoc @last-pos 1 (+ (second @last-pos)
-                                                                      (- (.-scrollTop (.-documentElement js/document))
-                                                                         @last-scroll-pos))))
+                               (reset! last-mouse-pos (assoc @last-mouse-pos 1 (+ (second @last-mouse-pos)
+                                                                                  (- (.-scrollTop (.-documentElement js/document))
+                                                                                     @last-scroll-pos))))
                                (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document))))))
 
 
@@ -155,16 +155,17 @@
                                                              (if (is-touch? a)
                                                                  (.-pageY (aget (.-touches a) 0))
                                                                  (.-pageY a))
-                                                             (second @last-pos)))]
-
-                       (reset! last-pos (get-pos a))
-                       (reset! height-temporary new-height)
-                       (reset! height (round-to-height @height-temporary)))))
+                                                             (second @last-mouse-pos)))]
+                       (if (< (+ @top new-height) rect-height)
+                         (do
+                           (reset! last-mouse-pos (get-pos a))
+                           (reset! height-temporary new-height)
+                           (reset! height (round-to-height new-height)))))))
 
         mouse-down-resize (fn [a]
                             (.stopPropagation a)
                             (reset! dragged? true)
-                            (reset! last-pos (get-pos a))
+                            (reset! last-mouse-pos (get-pos a))
                             (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))
                             (reset! drag-end-listener stop-resize)
                             (reset! drag-move-listener resize)
@@ -190,43 +191,38 @@
                                    (reset! scroll-interval
                                            (.setInterval js/window
                                                          #(do
-                                                            (.log js/console (str  (.-scrollLeft (get-el "scroll-container")) " - " (- scroll-width grid-width)))
                                                             (cond
                                                               (< how-much-scroll-y 100) (do
-                                                                                          ;(.log js/console "le")
                                                                                           (set!
                                                                                             (.-scrollTop (.-documentElement js/document))
                                                                                             (+ (.-scrollTop (.-documentElement js/document)) px-number))
                                                                                           (if (> (- rect-height @height)
                                                                                                  (+ @top px-number))
                                                                                             (reset! top (+ @top px-number)))
-                                                                                          (reset! last-pos (assoc @last-pos 1 (+ (second @last-pos) px-number))))
+                                                                                          (reset! last-mouse-pos (assoc @last-mouse-pos 1 (+ (second @last-mouse-pos) px-number))))
                                                               (< mouse-top 100) (do
-                                                                                  ;(.log js/console "fel")
                                                                                   (set!
                                                                                     (.-scrollTop (.-documentElement js/document))
                                                                                     (- (.-scrollTop (.-documentElement js/document)) px-number))
                                                                                   (if (< 0 (- @top px-number))
                                                                                     (reset! top (- @top px-number)))
-                                                                                  (reset! last-pos (assoc @last-pos 1 (- (second @last-pos) px-number))))
+                                                                                  (reset! last-mouse-pos (assoc @last-mouse-pos 1 (- (second @last-mouse-pos) px-number))))
                                                               (> mouse-left (- (+ rect-left rect-width) 50)) (do
-                                                                                                               ;(.log js/console "jonn")
                                                                                                                (set!
                                                                                                                  (.-scrollLeft (get-el "scroll-container"))
                                                                                                                  (+ (.-scrollLeft (get-el "scroll-container")) px-number))
                                                                                                                (if (< (+ @left px-number)
                                                                                                                       (- scroll-width grid-width))
                                                                                                                  (reset! left (+ @left px-number)))
-                                                                                                               (reset! last-pos (assoc @last-pos 0 (+ (first @last-pos) px-number))))
+                                                                                                               (reset! last-mouse-pos (assoc @last-mouse-pos 0 (+ (first @last-mouse-pos) px-number))))
 
                                                               (< mouse-left (+ rect-left 50))  (do
-                                                                                                 ;(.log js/console (str "bal " mouse-left " < " (+ rect-left 50)))
                                                                                                  (set!
                                                                                                    (.-scrollLeft (get-el "scroll-container"))
                                                                                                    (- (.-scrollLeft (get-el "scroll-container")) px-number))
                                                                                                  (if (> (- @left px-number) 0)
                                                                                                    (reset! left (- @left px-number)))
-                                                                                                 (reset! last-pos (assoc @last-pos 0 (- (first @last-pos) px-number))))
+                                                                                                 (reset! last-mouse-pos (assoc @last-mouse-pos 0 (- (first @last-mouse-pos) px-number))))
 
                                                               :else (do
                                                                       (reset! not-real-scroll? false)
@@ -264,8 +260,8 @@
                         position (get-pos a)
                         click-left (first position)
                         click-top (second position)
-                        new-left (- @left (- (first @last-pos) click-left)) ;uj baloldalt a mozgatas alapjan
-                        new-top (- @top (- (second @last-pos) click-top))] ;uj fent a mozgatas alapjan]
+                        new-left (- @left (- (first @last-mouse-pos) click-left)) ;uj baloldalt a mozgatas alapjan
+                        new-top (- @top (- (second @last-mouse-pos) click-top))] ;uj fent a mozgatas alapjan]
 
                        (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))
                        (scroll-if-close a
@@ -284,8 +280,8 @@
 
                        ;Left and Right Boundaries
                        (if (and
-                             (<= (+ rect-left (/ grid-width 2)) (first @last-pos))
-                             (<= (first @last-pos)
+                             (<= (+ rect-left (/ grid-width 2)) (first @last-mouse-pos))
+                             (<= (first @last-mouse-pos)
                                  (- (+ rect-left (.-clientWidth container)) (/ grid-width 2)))
                              (<= 0 new-left)
                              (<= new-left (- scroll-width grid-width)))
@@ -314,14 +310,14 @@
                          (if (<= click-top (+ rect-top (/ @height 2)))
                            (reset! top 0)
                            (reset! top (- rect-height @height))))
-                       (reset! last-pos [click-left click-top]))))
+                       (reset! last-mouse-pos [click-left click-top]))))
 
 
         on-pan-start (fn [event]
                         (let [position (get-pos event)]; (reset! dragging? true)
                           (reset! dragged? true)
                           (.stopPropagation event)
-                          (reset! last-pos position)
+                          (reset! last-mouse-pos position)
                           (reset! drag-end-listener on-pan-end)
                           (reset! drag-move-listener on-pan)
                           ;(reset! scroll-listener scroll-event)
@@ -394,8 +390,16 @@
   (let [all-columns (range 30)
         all-rows (range 70)]
     (reagent/create-class
-     {;:component-did-mount #(do)
-                              ;(add-event-listener "container" "click" (fn [a] (.log js/console (str "hello: " (js->clj a)))))
+     {:component-did-mount #(do
+                              (add-event-listener js/window "keydown" (fn [a]
+                                                                          (case (.-key a)
+                                                                                "ArrowLeft" (set!
+                                                                                              (.-scrollLeft (get-el "scroll-container"))
+                                                                                              (- (.-scrollLeft (get-el "scroll-container")) 25))
+                                                                                "ArrowRight" (set!
+                                                                                               (.-scrollLeft (get-el "scroll-container"))
+                                                                                               (+ (.-scrollLeft (get-el "scroll-container")) 25))
+                                                                                nil))))
                               ;(dispatch [:init-calendar "container"]))
       :reagent-render
        (fn []
