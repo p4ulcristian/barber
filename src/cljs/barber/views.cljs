@@ -47,6 +47,7 @@
 (def grid-height 72)
 (def step-height (/ grid-height 4))
 (def border-width 1)
+(def title-height 25)
 
 
 
@@ -83,8 +84,11 @@
 
 (def scroll-interval (atom nil))
 
+(def last-scroll-pos (atom 0))
+(def rect (atom nil))
+
 (defn one-event [id start-left start-top start-height]
-  (let [rect (atom nil)
+  (let [
 
         drag-end-listener (atom nil)
         drag-move-listener (atom nil)
@@ -94,7 +98,7 @@
 
 
         last-mouse-pos (atom [0 0])
-        last-scroll-pos (atom 0)
+
         calc-left (* start-left grid-width)
         calc-top (* start-top step-height)
         left-temporary (atom 0)
@@ -135,8 +139,8 @@
                                ;(reset! top-temporary (+ @top-temporary (- (.-scrollTop (.-documentElement js/document)) @last-scroll-pos)))
                                (reset! last-mouse-pos (assoc @last-mouse-pos 1 (+ (second @last-mouse-pos)
                                                                                   (- (.-scrollTop (.-documentElement js/document))
-                                                                                     @last-scroll-pos))))
-                               (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document))))))
+                                                                                     @last-scroll-pos)))))))
+
 
 
 
@@ -254,9 +258,9 @@
                        [container (get-el "container")
                         scroll-width (.-scrollWidth container)
                         rect-width (.-clientWidth container)
-                        rect-height (.-clientHeight container)
+                        rect-height (- (.-clientHeight container) title-height)
                         rect-left (.-left @rect)
-                        rect-top (.-top @rect)
+                        rect-top (+ title-height (.-top @rect))
                         position (get-pos a)
                         click-left (first position)
                         click-top (second position)
@@ -364,7 +368,8 @@
                    :cursor  (if @dragged? "grabbing" "grab")
                    :left 0
                    :top 0
-                   :transform (str "translate(" (+ 1 @left) "px," (+ 1 @top) "px)")
+                   :transform (str "translate(" (+ 1 @left) "px," (+ 1 (+ title-height @top))
+                                   "px)")
                    :position "absolute" :background "rgb(255, 204, 71)"
                    :border-bottom-right-radius "5px"
                    :opacity (if @dragged? 1 1)
@@ -384,13 +389,20 @@
 
 
 
+(defn one-person [name]
+      [:div.uk-text-center {:style {:width (str grid-width "px")
+                                    ;:position "absolute"
+                                    :height (str title-height "px")}}
+       name])
+
 
 
 (defn calendar []
-  (let [all-columns (range 30)
+  (let [all-columns ["Balazs" "Bela" "Gyozo" "Barber" "Sanyi" "Ferdinand"]
         all-rows (range 70)]
     (reagent/create-class
      {:component-did-mount #(do
+                              (add-event-listener js/window "scroll" (fn [a] (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))))
                               (add-event-listener js/window "keydown" (fn [a]
                                                                           (case (.-key a)
                                                                                 "ArrowLeft" (set!
@@ -404,26 +416,42 @@
       :reagent-render
        (fn []
            [:div.uk-width-1-1 {:style {:display "flex" :padding "50px"}}
-            [:div (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
-                                                 %2])
-                               all-rows)]
-            [:div#scroll-container {:style {:overflow "auto"}}
-             [:div#container.uk-inline.noselect {:style {:display "flex"  :z-index 40}}
-              (map-indexed (fn [row-i a]
-                               (-> ^{:key a}[:div (map-indexed (fn [i b] (-> ^{:key b}[:div
-                                                                                       {:style {:background (if (= 0 (mod row-i 3))  "#ccc" "white")
-                                                                                                :width (str (- grid-width border-width) "px")
-                                                                                                :height (str (- step-height border-width) "px")
-                                                                                                :border-right (str border-width "px solid lightgrey")
-                                                                                                :border-top (if (= 0 (mod i 4))
-                                                                                                              (str border-width "px solid lightgrey")
-                                                                                                              (str border-width "px solid lightgrey"))}}]))
-                                                               all-rows)]))
+            [:div
+             [:div {:style {:height (str title-height "px")}}]
+             (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
+                                            %2])
+                          all-rows)]
+            [:div#scroll-container {:style {:overflow-x "auto"}}
+             [:div#container.uk-inline.noselect
+              {:style {:display "flex"  :z-index 40}}
+              [:div
+               {:style {:display "flex"
+                        :position "absolute"
+                        :z-index 2
+                        :background "white"
+                        :top (if @rect (if (> @last-scroll-pos (.-top @rect))
+                                         (- @last-scroll-pos (.-top @rect))
+                                         0)
+                                       0)}}
+               (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person a]))
+                            all-columns)]
+              (map-indexed (fn [col-i a]
+                               (-> ^{:key col-i}[:div
+                                                 [:div {:style {:height (str title-height "px")}}]
+                                                 (map-indexed (fn [row-i b] (-> ^{:key row-i}[:div
+                                                                                              {:style {:background (if (= 0 (mod col-i 3))  "#ccc" "white")
+                                                                                                       :width (str (- grid-width border-width) "px")
+                                                                                                       :height (str (- step-height border-width) "px")
+                                                                                                       :border-right (str border-width "px solid lightgrey")
+                                                                                                       :border-top (if (= 0 (mod row-i 4))
+                                                                                                                     (str border-width "px solid lightgrey")
+                                                                                                                     (str border-width "px solid lightgrey"))}}]))
+                                                              all-rows)]))
                            all-columns)
               ;[:div#event-container {:style {:position "absolute" :height "100%" :width "100%" :background "rgba(0,0,0,0.2)"}}]
-              [one-event "box" 0 0 2]
-              [one-event "box2" 8 0 3]
-              [one-event "box3" 0 44 4]]]])})))
+              [one-event "box" 0 0 4]]]])})))
+              ;[one-event "box2" 8 0 3]
+              ;[one-event "box3" 0 44 4]]]])})))
              ;[one-event "box4" 8 44 5]]])})))
 
 
