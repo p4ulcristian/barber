@@ -88,9 +88,7 @@
 (def rect (atom nil))
 
 (defn one-event [id start-left start-top start-height]
-  (let [
-
-        drag-end-listener (atom nil)
+  (let [drag-end-listener (atom nil)
         drag-move-listener (atom nil)
         scroll-listener (atom nil)
         not-real-scroll? (atom false)

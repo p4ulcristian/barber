@@ -226,6 +226,7 @@
      ["/post-request" {:post {:handler (fn [req] (text-wrap (str (:params req))))}}]
      ["/login" {:get (fn [req] (html-wrap (views/login-page req)))
                 :post post-login}]
+     ["/shop-data" {:get (fn [req] (text-wrap (db/shop-data req)))}]
      ["/add-user" {:post (fn [req]
                            (let [params (:params req)]
                             (text-wrap (db/add-user (assoc params :password (hashers/encrypt (:password params)))))))}]

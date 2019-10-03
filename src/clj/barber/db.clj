@@ -23,5 +23,11 @@
         (do (mc/insert db "users" (assoc user-map :role :admin))
             "Successfully added"))))
 
+  (defn shop-data [req]
+        (let [host  (get (:headers req) "host")
+              host-city (first (clojure.string/split host #"\."))]
+          (mc/find-one-as-map db "shops" {:_id host-city})))
+
+
   (defn get-from-mongo [req]
     (str (mc/find-maps db "documents" {}))))
