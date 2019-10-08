@@ -6,6 +6,7 @@
    [taoensso.encore :as encore :refer-macros (have have?)]
    [cljs.core.async :as async :refer (<! >! put! chan)]
    [taoensso.sente  :as sente :refer (cb-success?)]
+   [re-frame.core :refer [subscribe dispatch]]
    [ajax.core :as ajax :refer [GET POST]])) ; <--- Add this
 
 
@@ -83,7 +84,7 @@
   [{:as ev-msg :keys [?data]}]
   (let [[old-state-map new-state-map] (have vector? ?data)]
     (if (:first-open? new-state-map)
-      (->output! "Channel socket successfully established!: %s" new-state-map)
+      (dispatch [:assoc-data-to-key :websocket? true])
       (->output! "Channel socket state change: %s"              new-state-map))))
 
 (defmethod -event-msg-handler :chsk/recv

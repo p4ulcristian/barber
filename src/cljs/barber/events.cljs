@@ -4,7 +4,8 @@
     [re-frame.core :refer [reg-event-db reg-event-fx inject-cofx path after dispatch reg-fx]]
     [cljs.spec.alpha :as s]
     [barber.sente :as sente]
-    [ajax.core :refer [GET POST]]))
+    [ajax.core :refer [GET POST]]
+    [cljs.reader :as reader :refer [read-string]]))
 
 
 (defn ajax-get [{:keys [url handler error-handler]}]
@@ -20,10 +21,11 @@
      :error-handler error-handler}))
 
 
-(defn chsk-send [config]
- (.notification js/UIkit "Chsk event!")
- (sente/chsk-send! [:example/hello-there {:had-a-callback? "indeed"}] 5000
-      (fn [cb-reply] (.notification js/UIkit (str cb-reply)))))
+(defn chsk-send [{:keys [event-key data callback]}]
+ ;(.notification js/UIkit "Chsk event!")
+ (sente/chsk-send! [event-key data] 8000
+      (fn [cb-reply] (callback cb-reply))))
+
 ;; -- Interceptors --------------------------------------------------------------
 ;;
 ;; Interceptors are a more advanced topic. So, we're plunging into the deep
@@ -134,7 +136,10 @@
   (fn [db [_ the-map]]
     (merge db the-map)))
 
-
+(reg-event-db
+  :assoc-data-to-key
+  (fn [db [_ the-key the-map]]
+      (assoc db the-key the-map)))
 
 
 (reg-fx
@@ -147,13 +152,61 @@
 
 (reg-fx
   :chsk
-  (fn [config]
-    (chsk-send config)))
+  (fn [params]
+    (chsk-send params)))
 
 (reg-event-fx
   :ws-server-time
   (fn [_]
     {:chsk {}}))
+
+(reg-event-db
+  :add-calendar-data
+  (fn [db [_ data]]
+      (let [read-data (read-string data)
+            data-with-id (map
+                           #(assoc (second %) :reservation-id (str (first %)))
+                           read-data)]
+
+           (.log js/console (str data))
+           (assoc db :calendar-data data-with-id))))
+
+
+
+(reg-event-fx
+  :get-reservations
+  (fn [_]
+      {:chsk {:event-key :calendar/get-day
+              :data "2019-09-02"
+              :callback #(dispatch [:assoc-data-to-key :reservations %])}}))
+
+(reg-event-fx
+  :get-employees
+  (fn [_]
+      {:chsk {:event-key :employees/get-all
+              :callback #(dispatch [:assoc-data-to-key :employees %])}}))
+
+(reg-event-fx
+  :get-services
+  (fn [_]
+      {:chsk {:event-key :services/get-all
+              :callback #(dispatch [:assoc-data-to-key :services %])}}))
+
+(reg-event-fx
+  :get-opening-hours
+  (fn [_]
+      {:chsk {:event-key :shop/opening-hours
+              :callback #(dispatch [:assoc-data-to-key :opening-hours %])}}))
+
+(reg-event-db
+  :get-calendar-data
+  (fn [db [_]]
+      (dispatch [:get-opening-hours])
+      (dispatch [:get-services])
+      (dispatch [:get-employees])
+      (dispatch [:get-reservations])
+      db))
+
 
 (reg-event-fx
   :get-server-time

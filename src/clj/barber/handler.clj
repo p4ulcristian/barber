@@ -20,6 +20,7 @@
    [taoensso.sente.server-adapters.http-kit :refer (get-sch-adapter)]
    [ring.middleware.defaults :refer [site-defaults wrap-defaults]]
    [buddy.hashers :as hashers]
+   [buddy.auth :refer [authenticated?]]
    [ring.util.response :refer [response redirect]]
    [buddy.auth.backends.session :refer [session-backend]]
    [buddy.auth.middleware :refer [wrap-authentication wrap-authorization]]
@@ -45,16 +46,23 @@
 
 (defn post-login [req]
   "Logging in users with login-page"
-  (let [username (-> req :form-params (get "username"))
+  (let [user-name (-> req :form-params (get "username"))
         password (-> req :form-params (get "password"))
-        session (:session req)]
-    (if (db/authenticate-user username
-          (fn [pass-hash]
-              (hashers/check password pass-hash)))
-     (assoc (redirect "/")
+        session (:session req)
+        user (db/get-user user-name)
+        user-hash (:password user)
+        user-role (:role user)
+        shop-id (:shop-id user)]
+    (if (= password user-hash)
+      ;Amig tesztelek
+      ;(hashers/check password user-hash)
+     (assoc (redirect "/calendar")
             :session (assoc session
-                       :identity username
-                       :uid username))
+                       :identity user-name
+                       :role user-role
+                       ;:name username
+                       :shop-id shop-id))
+
      (redirect "/login"))))
 
 (defn post-logout [{session :session}]
@@ -158,19 +166,19 @@
 
   ;;;; Sente event handlers
 
-  (defmulti -event-msg-handler
+  (defmulti -sente-messages
     "Multimethod to handle Sente `event-msg`s"
     :id) ; Dispatch on event-id
 
 
-  (defn event-msg-handler
-    "Wraps `-event-msg-handler` with logging, error catching, etc."
+  (defn sente-messages
+    "Wraps `-sente-messages` with logging, error catching, etc."
     [{:as ev-msg :keys [id ?data event]}]
-    (-event-msg-handler ev-msg)) ; Handle event-msgs on a single thread
-    ;; (future (-event-msg-handler ev-msg)) ; Handle event-msgs on a thread pool
+    (-sente-messages ev-msg)) ; Handle event-msgs on a single thread
+    ;; (future (-sente-messages ev-msg)) ; Handle event-msgs on a thread pool
 
 
-  (defmethod -event-msg-handler
+  (defmethod -sente-messages
     :default ; Default/fallback case (no other matching handler)
     [{:as ev-msg :keys [event id ?data ring-req ?reply-fn send-fn]}]
     (let [session (:session ring-req)
@@ -179,18 +187,107 @@
       (when ?reply-fn
         (?reply-fn {:umatched-event-as-echoed-from-server event}))))
 
-  (defmethod -event-msg-handler :chsk/uidport-open
+  (defmethod -sente-messages :chsk/uidport-open
       [{:as ev-msg :keys [?reply-fn]}]
       (update-connected-users  ev-msg @connected-uids))
 
-  (defmethod -event-msg-handler :example/test-rapid-push
+  (defmethod -sente-messages :example/test-rapid-push
     [ev-msg] (test-fast-server>user-pushes))
 
-  (defmethod -event-msg-handler :example/hello-there
+  (defmethod -sente-messages :example/hello-there
       [{:as ev-msg :keys [?reply-fn]}]
       (?reply-fn {:data "hmmdsadas"}))
 
-  (defmethod -event-msg-handler :example/toggle-broadcast
+
+  ;Calendar events
+
+  (defmethod -sente-messages :calendar/get-day
+                [{:as ev-msg :keys [?reply-fn ?data ring-req]}]
+                (?reply-fn (db/get-day-from-calendar ?data ring-req)))
+
+  (defmethod -sente-messages :calendar/add-event
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :calendar/add-event)))
+
+  (defmethod -sente-messages :calendar/modify-event
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :calendar/modify-event)))
+
+  (defmethod -sente-messages :calendar/remove-event
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :calendar/remove-event)))
+
+  ;Employee events
+
+  (defmethod -sente-messages :employees/get-all
+             [{:as ev-msg :keys [?reply-fn ring-req]}]
+             (?reply-fn (db/get-employees ring-req)))
+
+  (defmethod -sente-messages :employees/add
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :employees/add)))
+
+  (defmethod -sente-messages :employees/modify
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :employees/modify)))
+
+  (defmethod -sente-messages :employees/remove
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :employees/remove)))
+
+  (defmethod -sente-messages :employees/add-break
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :employees/add-break)))
+
+  ;Service-events
+  (defmethod -sente-messages :services/get-all
+             [{:as ev-msg :keys [?reply-fn ring-req]}]
+             (?reply-fn (db/get-services ring-req)))
+
+  (defmethod -sente-messages :services/add
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :services/add)))
+
+  (defmethod -sente-messages :services/modify
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :services/modify)))
+
+  (defmethod -sente-messages :services/remove
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :services/remove)))
+
+  ;User events
+
+  (defmethod -sente-messages :users/add
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :users/add)))
+  (defmethod -sente-messages :users/modify
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :users/modify)))
+  (defmethod -sente-messages :users/remove
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :users/remove)))
+
+  ;Brakes events
+
+  (defmethod -sente-messages :brakes/add
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :brakes/add)))
+  (defmethod -sente-messages :brakes/remove
+             [{:as ev-msg :keys [?reply-fn]}]
+             (?reply-fn (str :brakes/remove)))
+
+  ;Shop events
+  (defmethod -sente-messages :shop/opening-hours
+            [{:as ev-msg :keys [?reply-fn ring-req]}]
+            (?reply-fn (db/get-opening-hours ring-req)))
+
+
+
+
+
+
+  (defmethod -sente-messages :example/toggle-broadcast
     [{:as ev-msg :keys [?reply-fn]}]
     (let [loop-enabled? (swap! broadcast-enabled?_ not)]
       (?reply-fn loop-enabled?)))
@@ -202,7 +299,9 @@
     (stop-router!)
     (reset! router_
       (sente/start-server-chsk-router!
-        ch-chsk event-msg-handler))))
+        ch-chsk sente-messages))))
+
+
 
 
 
@@ -221,7 +320,10 @@
 (def app
   (reitit-ring/ring-handler
    (reitit-ring/router
-    [["/" {:get {:handler (fn [req] (html-wrap (views/loading-page)))}}]
+    [["/calendar" {:get {:handler (fn [req]
+                                      (if (authenticated? (:session req))
+                                        (html-wrap (views/loading-page))
+                                        (redirect "/login")))}}]
      ["/server-time" {:get {:handler server-time-handler}}]
      ["/post-request" {:post {:handler (fn [req] (text-wrap (str (:params req))))}}]
      ["/login" {:get (fn [req] (html-wrap (views/login-page req)))
@@ -255,3 +357,4 @@
         #(wrap-authorization % backend)
         #(wrap-defaults % (assoc-in site-defaults [:security :anti-forgery] true))]
       middleware)}))
+

@@ -19,6 +19,16 @@
     (get db the-key)))
 
 (reg-sub
+  :calendar-data-loaded?
+  (fn [db [_ the-key]]
+      (if (and (:reservations db)
+               (:employees db)
+               (:services db)
+               (:opening-hours db))
+        true
+        false)))
+
+(reg-sub
   :showing          ;; usage:   (subscribe [:showing])
   (fn [db _]        ;; db is the (map) value stored in the app-db atom
     (:showing db))) ;; extract a value from the application state

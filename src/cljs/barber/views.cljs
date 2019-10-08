@@ -395,9 +395,54 @@
 
 
 
+
+(defn map-row-title [times]
+      [:div
+       [:div {:style {:height (str title-height "px")}}]
+       (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
+                                    %2])
+                    times)])
+
+(defn map-column-title [employees]
+      [:div {:style {:display "flex"
+                     :position "absolute"
+                     :z-index 2
+                     :background "white"
+                     :top (if @rect (if (> @last-scroll-pos (.-top @rect))
+                                      (- @last-scroll-pos (.-top @rect))
+                                      0)
+                                    0)}}
+       (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person a]))
+                    (mapv :name (sort-by :priority employees)))])
+
+(defn make-calendar-rows-and-columns [rows columns]
+      [:div
+       (map-indexed (fn [col-i a]
+                        (-> ^{:key col-i}[:div
+                                          [:div {:style {:height (str title-height "px")}}]
+                                          (doall (map-indexed (fn [row-i b] (-> ^{:key row-i}[:div
+                                                                                              {:style {:background (if (= 0 (mod col-i 3))  "#ccc" "white")
+                                                                                                       :width (str (- grid-width border-width) "px")
+                                                                                                       :height (str (- step-height border-width) "px")
+                                                                                                       :border-right (str border-width "px solid lightgrey")
+                                                                                                       :border-top (if (= 0 (mod row-i 4))
+                                                                                                                     (str border-width "px solid lightgrey")
+                                                                                                                     (str border-width "px solid lightgrey"))}}]))
+                                                              rows))]))
+                    columns)])
+
+(defn double-element []
+      [:<> [:div "hip"]
+           [:div "hop"]])
+
 (defn calendar []
-  (let [all-columns ["Balazs" "Bela" "Gyozo" "Barber" "Sanyi" "Ferdinand"]
-        all-rows (range 70)]
+  (let [employees (subscribe [:data :employees])
+        services (subscribe [:data :services])
+        reservations (subscribe [:data :reservations])
+        opening-hours (subscribe [:data :opening-hours])
+        all-columns (fn [] (mapv :name (sort-by :priority @employees)))
+        ;all-columns ["Balazs" "Bela" "Gyozo" "Barber" "Sanyi" "Ferdinand"]
+        all-rows (fn [] (range 0 (first (:monday @opening-hours))))]
     (reagent/create-class
      {:component-did-mount #(do
                               (add-event-listener js/window "scroll" (fn [a] (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))))
@@ -414,38 +459,25 @@
       :reagent-render
        (fn []
            [:div.uk-width-1-1 {:style {:display "flex" :padding "50px"}}
-            [:div
-             [:div {:style {:height (str title-height "px")}}]
-             (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
-                                            %2])
-                          all-rows)]
+            ;[map-row-title (range 0 (first (:monday @opening-hours)))]
             [:div#scroll-container {:style {:overflow-x "auto"}}
              [:div#container.uk-inline.noselect
               {:style {:display "flex"  :z-index 40}}
-              [:div
-               {:style {:display "flex"
-                        :position "absolute"
-                        :z-index 2
-                        :background "white"
-                        :top (if @rect (if (> @last-scroll-pos (.-top @rect))
-                                         (- @last-scroll-pos (.-top @rect))
-                                         0)
-                                       0)}}
-               (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person a]))
-                            all-columns)]
-              (map-indexed (fn [col-i a]
-                               (-> ^{:key col-i}[:div
-                                                 [:div {:style {:height (str title-height "px")}}]
-                                                 (map-indexed (fn [row-i b] (-> ^{:key row-i}[:div
-                                                                                              {:style {:background (if (= 0 (mod col-i 3))  "#ccc" "white")
-                                                                                                       :width (str (- grid-width border-width) "px")
-                                                                                                       :height (str (- step-height border-width) "px")
-                                                                                                       :border-right (str border-width "px solid lightgrey")
-                                                                                                       :border-top (if (= 0 (mod row-i 4))
-                                                                                                                     (str border-width "px solid lightgrey")
-                                                                                                                     (str border-width "px solid lightgrey"))}}]))
-                                                              all-rows)]))
-                           all-columns)
+              ;[map-column-title (all-columns)]
+              [double-element]
+              (comment (map-indexed (fn [col-i a]
+                                        (-> ^{:key col-i}[:div
+                                                          [:div {:style {:height (str title-height "px")}}]
+                                                          (doall (map-indexed (fn [row-i b] (-> ^{:key row-i}[:div
+                                                                                                              {:style {:background (if (= 0 (mod col-i 3))  "#ccc" "white")
+                                                                                                                       :width (str (- grid-width border-width) "px")
+                                                                                                                       :height (str (- step-height border-width) "px")
+                                                                                                                       :border-right (str border-width "px solid lightgrey")
+                                                                                                                       :border-top (if (= 0 (mod row-i 4))
+                                                                                                                                     (str border-width "px solid lightgrey")
+                                                                                                                                     (str border-width "px solid lightgrey"))}}]))
+                                                                              (all-rows)))]))
+                                    (all-columns)))
               ;[:div#event-container {:style {:position "absolute" :height "100%" :width "100%" :background "rgba(0,0,0,0.2)"}}]
               [one-event "box" 0 0 4]]]])})))
               ;[one-event "box2" 8 0 3]
@@ -502,9 +534,21 @@
                [:ul]]]])})))
                 ;[todo-app]]]]])})))
 
+(defn calendar-loader []
+  (let [calendar-data-loaded? (subscribe [:calendar-data-loaded?])]
+    (reagent/create-class
+      {:component-did-mount #(dispatch [:get-calendar-data])
+       :reagent-render
+       (fn []
+           (if @calendar-data-loaded?
+             [calendar]
+             [:div "Loading screen ide jon"]))})))
+
 (defn current-page []
   (fn []
-    (let [user (subscribe [:data :user])
+    (let [websocket? (subscribe [:data :websocket?])
+          opening-hours (subscribe [:data :opening-hours])
+          user (subscribe [:data :user])
           this-page (subscribe [:data :current-page])
           route-params (subscribe [:data :route-params])]
       (comment [:div
@@ -520,7 +564,9 @@
                  [:a {:href "/login"} [:button.uk-button.uk-button-primary "Login"]]
                  [:a.uk-margin-small-left {:href "/logout"} [:button.uk-button.uk-button-danger "Logout"]]]
                 [home-page]])
-      [:div.uk-align-center
-       [:div {:style {:height "100px"}}]
-       [:div
-        [calendar]]])))
+      [:div
+       (if @websocket?
+         [calendar-loader])])))
+
+
+[{:_id "5c5895f3264661cd54af882c", :id 1, :name "Balázs", :priority 0} {:_id "5c5895fb264661cd54af882d", :id 2, :name "Józsi", :priority 1} {:_id "5c589602264661cd54af882e", :id 3, :name "Sanyi", :priority 2} {:_id "5c589611264661cd54af8830", :id 5, :name "Fecó", :priority 3} {:_id "5c589618264661cd54af8831", :id 6, :name "Győző", :priority 4} {:_id "5c58961e264661cd54af8832", :id 7, :name "Márk", :priority 5} {:_id "5c589627264661cd54af8833", :id 8, :name "Martin", :priority 11} {:_id "5c76c2e8bdf1993a82d3c493", :name "Dávid", :id 9, :priority 6} {:_id "5c76c308bdf1993a82d3c494", :name "Máté", :id 10, :priority 7} {:_id "5c76c30cbdf1993a82d3c495", :name "Tomi", :id 11, :priority 8} {:_id "5d43fd4ebdf1992f5c40b27e", :name "Marci", :priority 9, :id 12} {:_id "5d5eca59bdf19901f7f72635", :name "Boldizsár", :priority 10, :id 13}]

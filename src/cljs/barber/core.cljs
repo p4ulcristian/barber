@@ -15,7 +15,7 @@
 
 (def router
   (reitit/router
-   [["/" :index]
+   [["/calendar" :index]
     ["/items"
      ["" :items]
      ["/:item-id" :item]]
