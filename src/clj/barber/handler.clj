@@ -305,9 +305,6 @@
 
 
 
-(def router
-  "Start the router for Sente"
-  (start-router!))
 
 (def backend
   "For The Buddy authenticating services"

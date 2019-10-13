@@ -39,7 +39,7 @@
     (include-js "/js/uikit-icons.min.js")
     (include-js "https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js")
     (include-js "https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js")
-    (include-js "/js/app.js")]))
+    (include-js "/js/main.js")]))
 
 
 (defn login-page

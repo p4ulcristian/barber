@@ -5,6 +5,7 @@
     [cljs.spec.alpha :as s]
     [barber.sente :as sente]
     [ajax.core :refer [GET POST]]
+    [taoensso.sente  :refer (cb-success?)]
     [cljs.reader :as reader :refer [read-string]]))
 
 
@@ -23,8 +24,12 @@
 
 (defn chsk-send [{:keys [event-key data callback]}]
  ;(.notification js/UIkit "Chsk event!")
- (sente/chsk-send! [event-key data] 8000
-      (fn [cb-reply] (callback cb-reply))))
+       (sente/chsk-send! [event-key data] 8000
+            (fn [reply]
+                (if (cb-success? reply)
+                    (callback reply)
+                    (.log js/console "Sente error: " reply)))))
+
 
 ;; -- Interceptors --------------------------------------------------------------
 ;;
@@ -184,7 +189,8 @@
   :get-employees
   (fn [_]
       {:chsk {:event-key :employees/get-all
-              :callback #(dispatch [:assoc-data-to-key :employees %])}}))
+              :callback #(do (.log js/console "wtf")
+                             (dispatch [:assoc-data-to-key :employees %]))}}))
 
 (reg-event-fx
   :get-services

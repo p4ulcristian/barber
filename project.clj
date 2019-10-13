@@ -6,14 +6,12 @@
 
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [ring-server "0.5.0"]
-                 [reagent "0.8.1"]
-                 [reagent-utils "0.3.3"]
                  [ring "1.7.1"]
                  [ring/ring-defaults "0.3.2"]
                  [hiccup "1.0.5"]
+                 [reagent "0.9.0-rc1"]
+                 [reagent-utils "0.3.3"]
                  [yogthos/config "1.1.3"]
-                 [org.clojure/clojurescript "1.10.520"
-                  :scope "provided"]
                  [metosin/reitit "0.3.7"]
                  [pez/clerk "1.0.0"]
                  [venantius/accountant "0.2.4"
@@ -30,12 +28,15 @@
                  [com.novemberain/monger "3.5.0"]
                  [ring-transit "0.1.6"]
                  [clj-time "0.15.2"]
-                 [com.andrewmcveigh/cljs-time "0.5.2"]]
+                 [com.andrewmcveigh/cljs-time "0.5.2"]
 
-  :plugins [[lein-environ "1.1.0"]
-            [lein-cljsbuild "1.1.7"]
-            [lein-asset-minifier "0.4.6"
-             :exclusions [org.clojure/clojure]]]
+                 [thheller/shadow-cljs "2.8.64"]
+                 [org.clojure/clojurescript "1.10.520"]
+                 [com.google.javascript/closure-compiler-unshaded "v20190325"]
+                 [org.clojure/google-closure-library "0.0-20190213-2033d5d9"]]
+
+
+  :plugins [[lein-shadow "0.1.6"]]
 
   :ring {:handler barber.handler/app
          :uberwar-name "barber.war"}
@@ -51,13 +52,9 @@
   :source-paths ["src/clj" "src/cljc" "src/cljs"]
   :resource-paths ["resources" "target/cljsbuild"]
 
-  :minify-assets
-  [[:css {:source "resources/public/css/site.css"
-          :target "resources/public/css/site.min.css"}]]
-
   :cljsbuild
   {:builds {:min
-            {:source-paths ["src/cljs" "src/cljc" "env/prod/cljs"]
+            {:source-paths ["src/cljs" "src/cljc"]
              :compiler
              {:output-to        "target/cljsbuild/public/js/app.js"
               :output-dir       "target/cljsbuild/public/js"
@@ -66,7 +63,7 @@
               :infer-externs true
               :pretty-print  false}}
             :app
-            {:source-paths ["src/cljs" "src/cljc" "env/dev/cljs"]
+            {:source-paths ["src/cljs" "src/cljc"]
              :figwheel {:on-jsload "barber.core/mount-root"}
              :compiler
              {:main "barber.dev"
@@ -82,7 +79,12 @@
 
 
 
-
+  :shadow-cljs {:source-paths
+                ["src/cljs"]
+                :builds
+                {:app {:target :browser
+                       :modules {:main {:init-fn barber.core/init!}}
+                       :output-dir       "resources/public/js"}}}
   :figwheel
   {:http-server-root "public"
    :server-port 3449
@@ -116,8 +118,7 @@
 
                    :env {:dev true}}
 
-             :uberjar {:hooks [minify-assets.plugin/hooks]
-                       :source-paths ["env/prod/clj"]
+             :uberjar {:source-paths ["env/prod/clj"]
                        :prep-tasks ["compile" ["cljsbuild" "once" "min"]]
                        :env {:production true}
                        :aot :all
