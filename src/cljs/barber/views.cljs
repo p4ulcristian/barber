@@ -87,6 +87,9 @@
 (def last-scroll-pos (atom 0))
 (def rect (atom nil))
 
+(defn anim-frame-request [func]
+      (. js/window (requestAnimationFrame func)))
+
 (defn one-event [id start-left start-top start-height]
   (let [drag-end-listener (atom nil)
         drag-move-listener (atom nil)
@@ -290,6 +293,7 @@
                          (do
 
                            (reset! left new-left))
+
                            ;(scroll-if-close a click-top click-left))
                          (do
                            (if
@@ -394,13 +398,21 @@
        name])
 
 
+(defn convert-to-time [number]
+      (let [two-digits (fn [number]
+                           (if (= (count (str number)) 1)
+                             (str "0" number)
+                             (str number)))
+            hours (two-digits (quot number 60))
+            minutes (two-digits (mod number 60))]
+           (str hours ":" minutes)))
 
 
 (defn map-row-title [times]
       [:div
        [:div {:style {:height (str title-height "px")}}]
-       (map-indexed #(-> ^{:key %1}[:div.uk-text-right {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
-                                    %2])
+       (map-indexed #(-> ^{:key %1}[:div.uk-text-justify {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
+                                    (convert-to-time %2)])
                     times)])
 
 (defn map-column-title [employees]
@@ -413,7 +425,7 @@
                                       0)
                                     0)}}
        (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person a]))
-                    (mapv :name (sort-by :priority employees)))])
+                    employees)])
 
 (defn make-calendar-rows-and-columns [rows columns]
       [:div
@@ -431,9 +443,26 @@
                                                               rows))]))
                     columns)])
 
-(defn double-element []
-      [:<> [:div "hip"]
-           [:div "hop"]])
+(defn map-calendar [rows columns]
+      [:<>
+       (map-indexed (fn [col-i a]
+                        (-> ^{:key col-i}
+                            [:div
+                             [:div {:style {:height (str title-height "px")}}]
+                             (doall
+                               (map-indexed
+                                      (fn [row-i b]
+                                          (-> ^{:key row-i}
+                                              [:div
+                                               {:style {:background (if (= 0 (mod col-i 3))  "#ccc" "white")
+                                                        :width (str (- grid-width border-width) "px")
+                                                        :height (str (- step-height border-width) "px")
+                                                        :border-right (str border-width "px solid lightgrey")
+                                                        :border-top (if (= 0 (mod row-i 4))
+                                                                      (str border-width "px solid lightgrey")
+                                                                      (str border-width "px solid lightgrey"))}}]))
+                                      rows))]))
+                    columns)])
 
 (defn calendar []
   (let [employees (subscribe [:data :employees])
@@ -442,7 +471,8 @@
         opening-hours (subscribe [:data :opening-hours])
         all-columns (fn [] (mapv :name (sort-by :priority @employees)))
         ;all-columns ["Balazs" "Bela" "Gyozo" "Barber" "Sanyi" "Ferdinand"]
-        all-rows (fn [] (range 0 (first (:monday @opening-hours))))]
+        all-rows (fn [] (take-nth 15 (range (first (:monday @opening-hours))
+                                            (second (:monday @opening-hours)))))]
     (reagent/create-class
      {:component-did-mount #(do
                               (add-event-listener js/window "scroll" (fn [a] (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))))
@@ -459,25 +489,12 @@
       :reagent-render
        (fn []
            [:div.uk-width-1-1 {:style {:display "flex" :padding "50px"}}
-            ;[map-row-title (range 0 (first (:monday @opening-hours)))]
+            [map-row-title (all-rows)]
             [:div#scroll-container {:style {:overflow-x "auto"}}
              [:div#container.uk-inline.noselect
               {:style {:display "flex"  :z-index 40}}
-              ;[map-column-title (all-columns)]
-              [double-element]
-              (comment (map-indexed (fn [col-i a]
-                                        (-> ^{:key col-i}[:div
-                                                          [:div {:style {:height (str title-height "px")}}]
-                                                          (doall (map-indexed (fn [row-i b] (-> ^{:key row-i}[:div
-                                                                                                              {:style {:background (if (= 0 (mod col-i 3))  "#ccc" "white")
-                                                                                                                       :width (str (- grid-width border-width) "px")
-                                                                                                                       :height (str (- step-height border-width) "px")
-                                                                                                                       :border-right (str border-width "px solid lightgrey")
-                                                                                                                       :border-top (if (= 0 (mod row-i 4))
-                                                                                                                                     (str border-width "px solid lightgrey")
-                                                                                                                                     (str border-width "px solid lightgrey"))}}]))
-                                                                              (all-rows)))]))
-                                    (all-columns)))
+              [map-column-title (all-columns)]
+              [map-calendar (all-rows) (all-columns)]
               ;[:div#event-container {:style {:position "absolute" :height "100%" :width "100%" :background "rgba(0,0,0,0.2)"}}]
               [one-event "box" 0 0 4]]]])})))
               ;[one-event "box2" 8 0 3]
