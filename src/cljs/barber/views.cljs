@@ -135,12 +135,17 @@
         scroll-event (fn [a]
                          (if (and @dragged? (not @not-real-scroll?))
                            (do
-                               (reset! top (+ @top (- (.-scrollTop (.-documentElement js/document))
-                                                      @last-scroll-pos)))
+                               (do
+                                 (.log js/console
+                                       (str "Göröööög: "
+                                            @last-scroll-pos))
+                                 (reset! top (+ @top (- (.-scrollTop (.-documentElement js/document))
+                                                        @last-scroll-pos))))
                                ;(reset! top-temporary (+ @top-temporary (- (.-scrollTop (.-documentElement js/document)) @last-scroll-pos)))
                                (reset! last-mouse-pos (assoc @last-mouse-pos 1 (+ (second @last-mouse-pos)
                                                                                   (- (.-scrollTop (.-documentElement js/document))
-                                                                                     @last-scroll-pos)))))))
+                                                                                     @last-scroll-pos))))))
+                        (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document))))
 
 
 
@@ -268,7 +273,8 @@
                         new-left (- @left (- (first @last-mouse-pos) click-left)) ;uj baloldalt a mozgatas alapjan
                         new-top (- @top (- (second @last-mouse-pos) click-top))] ;uj fent a mozgatas alapjan]
 
-                       (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))
+                       ;
+                       ; (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))
                        (scroll-if-close a
                                         (if
                                           (clojure.string/includes? (.-type a) "touch")
@@ -326,7 +332,7 @@
                           (reset! last-mouse-pos position)
                           (reset! drag-end-listener on-pan-end)
                           (reset! drag-move-listener on-pan)
-                          ;(reset! scroll-listener scroll-event)
+                          (reset! scroll-listener scroll-event)
 
                           (if (is-touch? event)
                             (do
@@ -416,7 +422,8 @@
                     times)])
 
 (defn map-column-title [employees]
-      [:div {:style {:display "flex"
+      [:div {:on-mouse-down #()
+             :style {:display "flex"
                      :position "absolute"
                      :z-index 2
                      :background "white"
@@ -472,19 +479,36 @@
         all-columns (fn [] (mapv :name (sort-by :priority @employees)))
         ;all-columns ["Balazs" "Bela" "Gyozo" "Barber" "Sanyi" "Ferdinand"]
         all-rows (fn [] (take-nth 15 (range (first (:monday @opening-hours))
-                                            (second (:monday @opening-hours)))))]
+                                            (second (:monday @opening-hours)))))
+        keydown-interval (atom nil)]
     (reagent/create-class
      {:component-did-mount #(do
-                              (add-event-listener js/window "scroll" (fn [a] (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))))
-                              (add-event-listener js/window "keydown" (fn [a]
-                                                                          (case (.-key a)
-                                                                                "ArrowLeft" (set!
-                                                                                              (.-scrollLeft (get-el "scroll-container"))
-                                                                                              (- (.-scrollLeft (get-el "scroll-container")) 25))
-                                                                                "ArrowRight" (set!
-                                                                                               (.-scrollLeft (get-el "scroll-container"))
-                                                                                               (+ (.-scrollLeft (get-el "scroll-container")) 25))
-                                                                                nil))))
+                              ;(add-event-listener js/window "scroll" (fn [a] (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))))
+                              (add-event-listener js/window "keydown"
+                                                  (fn [a]
+                                                      (let [running? (if @keydown-interval true false)]
+                                                           (case (.-key a)
+                                                                 "ArrowLeft" (if-not running?
+                                                                                     (reset! keydown-interval
+                                                                                             (.setInterval js/window
+                                                                                               (fn [b] (set!
+                                                                                                         (.-scrollLeft (get-el "scroll-container"))
+                                                                                                         (- (.-scrollLeft (get-el "scroll-container")) 2)))
+                                                                                               0.05)))
+                                                                 "ArrowRight" (if-not running?
+                                                                                      (reset! keydown-interval
+                                                                                              (.setInterval js/window
+                                                                                                (fn [b] (set!
+                                                                                                          (.-scrollLeft (get-el "scroll-container"))
+                                                                                                          (+ (.-scrollLeft (get-el "scroll-container")) 2)))
+                                                                                                0.05)))
+                                                                 nil))))
+                              (add-event-listener js/window "keyup" (fn [a]
+                                                                        (if @keydown-interval
+                                                                          (do
+                                                                            (.clearInterval js/window @keydown-interval)
+                                                                            (reset! keydown-interval nil))))))
+
                               ;(dispatch [:init-calendar "container"]))
       :reagent-render
        (fn []
