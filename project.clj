@@ -46,38 +46,12 @@
   :main barber.server
   :clean-targets ^{:protect false}
   [:target-path
+   "resources/public/js/cljs-runtime"
    [:cljsbuild :builds :app :compiler :output-dir]
    [:cljsbuild :builds :app :compiler :output-to]]
 
   :source-paths ["src/clj" "src/cljc" "src/cljs"]
   :resource-paths ["resources" "target/cljsbuild"]
-
-  :cljsbuild
-  {:builds {:min
-            {:source-paths ["src/cljs" "src/cljc"]
-             :compiler
-             {:output-to        "target/cljsbuild/public/js/app.js"
-              :output-dir       "target/cljsbuild/public/js"
-              :source-map       "target/cljsbuild/public/js/app.js.map"
-              :optimizations :advanced
-              :infer-externs true
-              :pretty-print  false}}
-            :app
-            {:source-paths ["src/cljs" "src/cljc"]
-             :figwheel {:on-jsload "barber.core/mount-root"}
-             :compiler
-             {:main "barber.dev"
-              :asset-path "/js/out"
-              :output-to "target/cljsbuild/public/js/app.js"
-              :output-dir "target/cljsbuild/public/js/out"
-              :source-map true
-              :optimizations :none
-              :pretty-print  true}}}}
-
-
-
-
-
 
   :shadow-cljs {:source-paths
                 ["src/cljs"]
@@ -85,41 +59,11 @@
                 {:app {:target :browser
                        :modules {:main {:init-fn barber.core/init!}}
                        :output-dir       "resources/public/js"}}}
-  :figwheel
-  {:http-server-root "public"
-   :server-port 3449
-   :nrepl-port 7002
-   :nrepl-middleware [cider.piggieback/wrap-cljs-repl]
 
 
-   :css-dirs ["resources/public/css"]
-   :ring-handler barber.handler/app}
+  :profiles {:uberjar {:source-paths ["src/barber/clj"]
+                       :prep-tasks ["clean"
+                                    "compile" ["shadow" "release" "app"]]
 
-
-
-  :profiles {:dev {:repl-options {:init-ns barber.repl}
-                   :dependencies [[cider/piggieback "0.4.1"]
-                                  [binaryage/devtools "0.9.10"]
-                                  [ring/ring-mock "0.4.0"]
-                                  [ring/ring-devel "1.7.1"]
-                                  [prone "1.6.3"]
-                                  [figwheel-sidecar "0.5.18"]
-                                  [nrepl "0.6.0"]
-                                  [pjstadig/humane-test-output "0.9.0"]]
-                                  
-
-
-                   :source-paths ["env/dev/clj"]
-                   :plugins [[lein-figwheel "0.5.18"]]
-
-
-                   :injections [(require 'pjstadig.humane-test-output)
-                                (pjstadig.humane-test-output/activate!)]
-
-                   :env {:dev true}}
-
-             :uberjar {:source-paths ["env/prod/clj"]
-                       :prep-tasks ["compile" ["cljsbuild" "once" "min"]]
-                       :env {:production true}
                        :aot :all
                        :omit-source true}})

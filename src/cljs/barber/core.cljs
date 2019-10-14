@@ -10,7 +10,6 @@
    [barber.events] ;; These two are only required to make the compiler
    [barber.subs]   ;; load them (see docs/App-Structure.md)
    [barber.views]
-   [devtools.core :as devtools]
    [accountant.core :as accountant]))
 
 (def router

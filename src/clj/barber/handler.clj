@@ -1,7 +1,7 @@
 (ns barber.handler
   (:require
    [reitit.ring :as reitit-ring]
-   [barber.middleware :refer [middleware]]
+   ;[barber.middleware :refer [middleware]]
    [barber.views :as views]
    [barber.db :as db]
    [taoensso.sente :as sente]
@@ -346,12 +346,11 @@
     (reitit-ring/create-resource-handler {:path "/" :root "/public"})
     (reitit-ring/create-default-handler))
    {:middleware
-     (concat
-       [ring.middleware.keyword-params/wrap-keyword-params
-        ring.middleware.params/wrap-params
-        #(wrap-transit-params % {:opts {}})
-        #(wrap-authentication % backend)
-        #(wrap-authorization % backend)
-        #(wrap-defaults % (assoc-in site-defaults [:security :anti-forgery] true))]
-      middleware)}))
+     [ring.middleware.keyword-params/wrap-keyword-params
+      ring.middleware.params/wrap-params
+      #(wrap-transit-params % {:opts {}})
+      #(wrap-authentication % backend)
+      #(wrap-authorization % backend)
+      #(wrap-defaults % (assoc-in site-defaults [:security :anti-forgery] true))]}))
+
 
