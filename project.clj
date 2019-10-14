@@ -58,7 +58,9 @@
                 :builds
                 {:app {:target :browser
                        :modules {:main {:init-fn barber.core/init!}}
-                       :output-dir       "resources/public/js"}}}
+                       :output-dir       "resources/public/js"
+                       :devtools {:after-load barber.core/mount-root}}}}
+
 
 
   :profiles {:uberjar {:source-paths ["src/barber/clj"]

@@ -1,7 +1,12 @@
 (ns barber.views
   (:require [reagent.core  :as reagent :refer [atom]]
+            ["react" :as react :refer (createElement)]
             [re-frame.core :refer [subscribe dispatch]]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [react-flatpickr :default Flatpickr]))
+
+(defn flatpickr [props]
+  [:> Flatpickr props])
 
 
 (defn anim-to [element timeout the-map]
@@ -581,14 +586,31 @@
       {:component-did-mount #(dispatch [:get-calendar-data])
        :reagent-render
        (fn []
-           (if @calendar-data-loaded?
-             [calendar]
-             [:div "Loading screen ide jon"]))})))
+           [:div
+
+
+            (if @calendar-data-loaded?
+              [calendar]
+              [:div "Loading screen ide jon"])])})))
+
+
+(defn calendar-page []
+  (let [date (atom "2019-01-01")
+        websocket? (subscribe [:data :websocket?])]
+    (fn []
+       [:div
+        [:div.uk-width-1-1 {:style {:background "#222"}}
+         [flatpickr {:value @date}]
+         "na végre"
+         [:button
+          {:on-click #(reset! date "2019-01-10")}
+          "hello"]]
+        (if @websocket?
+          [calendar-loader])])))
 
 (defn current-page []
   (fn []
-    (let [websocket? (subscribe [:data :websocket?])
-          opening-hours (subscribe [:data :opening-hours])
+    (let [opening-hours (subscribe [:data :opening-hours])
           user (subscribe [:data :user])
           this-page (subscribe [:data :current-page])
           route-params (subscribe [:data :route-params])]
@@ -602,12 +624,11 @@
                    [:div.uk-text-small "Page: "@this-page]
                    [:div.uk-text-small "Params: " @route-params]]
                 [:div.uk-position-right.uk-padding-small
-                 [:a {:href "/login"} [:button.uk-button.uk-button-primary "Login"]]
+                 [:a {:href "/login"} [:button.uk-button.uk-button-primary "Login "]]
                  [:a.uk-margin-small-left {:href "/logout"} [:button.uk-button.uk-button-danger "Logout"]]]
                 [home-page]])
       [:div
-       (if @websocket?
-         [calendar-loader])])))
+       [calendar-page]])))
 
 
 [{:_id "5c5895f3264661cd54af882c", :id 1, :name "Balázs", :priority 0} {:_id "5c5895fb264661cd54af882d", :id 2, :name "Józsi", :priority 1} {:_id "5c589602264661cd54af882e", :id 3, :name "Sanyi", :priority 2} {:_id "5c589611264661cd54af8830", :id 5, :name "Fecó", :priority 3} {:_id "5c589618264661cd54af8831", :id 6, :name "Győző", :priority 4} {:_id "5c58961e264661cd54af8832", :id 7, :name "Márk", :priority 5} {:_id "5c589627264661cd54af8833", :id 8, :name "Martin", :priority 11} {:_id "5c76c2e8bdf1993a82d3c493", :name "Dávid", :id 9, :priority 6} {:_id "5c76c308bdf1993a82d3c494", :name "Máté", :id 10, :priority 7} {:_id "5c76c30cbdf1993a82d3c495", :name "Tomi", :id 11, :priority 8} {:_id "5d43fd4ebdf1992f5c40b27e", :name "Marci", :priority 9, :id 12} {:_id "5d5eca59bdf19901f7f72635", :name "Boldizsár", :priority 10, :id 13}]
