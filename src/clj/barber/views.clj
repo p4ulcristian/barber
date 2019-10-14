@@ -16,17 +16,14 @@
 (defn head []
   "Head with some metatags"
   [:head
-   [:title (clojure.string/capitalize "barber")]
-   ;[:meta {:content "barber description", :name "description"}]
-   ;[:meta {:content "barber keywords", :name "keywords"}]
-   ;[:meta {:content "Paul Cristian Martin", :name "author"}]
+   [:title "Barber"]
    [:link {:rel "icon" :href "/favicon.png" :type "image/png"}]
    [:meta {:charset "utf-8"}]
    [:meta {:name "viewport"
            :content "width=device-width, initial-scale=1"}]
    (include-css "/css/uikit.min.css")
    (include-css "css/flatpickr.min.css")
-   (include-css (if (env :dev) "/css/site.css" "/css/site.min.css"))])
+   (include-css "/css/site.css")])
 
 (defn loading-page []
   "The app's page"

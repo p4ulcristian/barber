@@ -54,12 +54,13 @@
   :resource-paths ["resources" "target/cljsbuild"]
 
   :shadow-cljs {:source-paths
-                ["src/cljs"]
+                ["src/cljs" ]
                 :builds
                 {:app {:target :browser
                        :modules {:main {:init-fn barber.core/init!}}
                        :output-dir       "resources/public/js"
-                       :devtools {:after-load barber.core/mount-root}}}}
+                       :devtools {:watch-dir "resources/public"
+                                  :after-load barber.core/mount-root}}}}
 
 
 

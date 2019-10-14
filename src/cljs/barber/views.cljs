@@ -599,12 +599,9 @@
         websocket? (subscribe [:data :websocket?])]
     (fn []
        [:div
+
         [:div.uk-width-1-1 {:style {:background "#222"}}
-         [flatpickr {:value @date}]
-         "na végre"
-         [:button
-          {:on-click #(reset! date "2019-01-10")}
-          "hello"]]
+         [flatpickr {:value @date :options {:inline true}}]]
         (if @websocket?
           [calendar-loader])])))
 
