@@ -9,3 +9,33 @@
 }
 .flatpickr-input{
 display: none;}
+
+.playfair{
+font-family: 'Playfair Display SC', serif;}
+
+.black-bg{
+background: #222;
+}
+.gold-text{
+color: rgb(255, 226, 38);
+}
+
+
+.bold-text{
+font-weight: 800;
+}
+
+
+.trapezium{
+    border-top-right-radius: 30%;
+    border-bottom-right-radius: 30%;
+    right: -30px;
+    background : #222;
+    position: absolute;
+    top: calc(50% - 50px);
+    height: 100px;
+    width: 30px;
+    color: white;
+    line-height: 100px;
+    cursor: pointer;
+}

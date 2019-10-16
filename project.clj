@@ -22,7 +22,6 @@
                  [cljs-ajax "0.8.0"]
                  [ring/ring-anti-forgery "1.3.0"]
                  [http-kit "2.3.0"]
-                 [clj-time "0.15.1"]
                  [buddy/buddy-auth "2.1.0"]
                  [buddy/buddy-hashers "1.3.0"]
                  [com.novemberain/monger "3.5.0"]
@@ -53,14 +52,13 @@
   :source-paths ["src/clj" "src/cljc" "src/cljs"]
   :resource-paths ["resources" "target/cljsbuild"]
 
-  :shadow-cljs {:source-paths
-                ["src/cljs" ]
-                :builds
+  :shadow-cljs {:builds
                 {:app {:target :browser
                        :modules {:main {:init-fn barber.core/init!}}
                        :output-dir       "resources/public/js"
                        :devtools {:watch-dir "resources/public"
                                   :after-load barber.core/mount-root}}}}
+
 
 
 

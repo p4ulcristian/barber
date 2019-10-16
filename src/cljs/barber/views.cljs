@@ -3,14 +3,44 @@
             ["react" :as react :refer (createElement)]
             [re-frame.core :refer [subscribe dispatch]]
             [clojure.string :as str]
+            [cljs-time.core :as time]
+
             [react-flatpickr :default Flatpickr]))
+
 
 (defn flatpickr [props]
   [:> Flatpickr props])
 
+(defn two-digits [number]
+  (if (= (count (str number)) 1)
+     (str "0" number)
+     (str number)))
+
+(defn str-from-date [date]
+  (let [year (two-digits (time/year date))
+        month (two-digits (time/month date))
+        day (two-digits (time/day date))]
+    (str year "-" month "-" day)))
+
+
+(defn get-tomorrow [date-str]
+  (let [date-splitted (clojure.string/split date-str #"-")
+        [year month day] (map js/parseInt date-splitted)]
+    (str-from-date
+      (time/plus (time/date-time year month day) (time/days 1)))))
+
+(defn get-yesterday [date-str]
+  (let [date-splitted (clojure.string/split date-str #"-")
+        [year month day] (map js/parseInt date-splitted)]
+    (str-from-date
+      (time/minus (time/date-time year month day) (time/days 1)))))
+
 
 (defn anim-to [element timeout the-map]
   (.to js/TweenMax element timeout (clj->js the-map)))
+
+(defn set-gsap [element the-map]
+  (.set js/TweenMax element (clj->js the-map)))
 
 (defn todo-input [{:keys [title on-save on-stop]}]
   (let [val  (reagent/atom title)
@@ -48,11 +78,11 @@
   (.removeEventListener el type callback false))
 
 
-(def grid-width 80)
+(def grid-width 120)
 (def grid-height 72)
 (def step-height (/ grid-height 4))
 (def border-width 1)
-(def title-height 25)
+(def title-height 30)
 
 
 
@@ -95,7 +125,13 @@
 (defn anim-frame-request [func]
       (. js/window (requestAnimationFrame func)))
 
-(defn one-event [id start-left start-top start-height]
+(defn get-service-by-id [id]
+  (let [services (fn [] (deref (subscribe [:data :services])))]
+    (str
+      (:name (first (filter #(= id (:_id %))
+                            (services)))))))
+
+(defn one-event [id start-left start-top start-height the-event]
   (let [drag-end-listener (atom nil)
         drag-move-listener (atom nil)
         scroll-listener (atom nil)
@@ -199,7 +235,7 @@
                                   inner-width (.-innerWidth js/window)
                                   how-much-scroll-y (- inner-height mouse-top)
                                   how-much-scroll-x (- inner-width mouse-left)
-                                  px-number 2]
+                                  px-number 5]
                                  (if @scroll-interval (.clearInterval js/window @scroll-interval))
                                  (do
                                    (reset! not-real-scroll? true)
@@ -242,7 +278,7 @@
                                                               :else (do
                                                                       (reset! not-real-scroll? false)
                                                                       (.clearInterval js/window @scroll-interval))))
-                                                         0.1)))))
+                                                         0.01)))))
 
 
 
@@ -278,8 +314,6 @@
                         new-left (- @left (- (first @last-mouse-pos) click-left)) ;uj baloldalt a mozgatas alapjan
                         new-top (- @top (- (second @last-mouse-pos) click-top))] ;uj fent a mozgatas alapjan]
 
-                       ;
-                       ; (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))
                        (scroll-if-close a
                                         (if
                                           (clojure.string/includes? (.-type a) "touch")
@@ -295,6 +329,7 @@
                                         rect-height)
 
                        ;Left and Right Boundaries
+                       (.log js/console (str rect-left))
                        (if (and
                              (<= (+ rect-left (/ grid-width 2)) (first @last-mouse-pos))
                              (<= (first @last-mouse-pos)
@@ -302,14 +337,13 @@
                              (<= 0 new-left)
                              (<= new-left (- scroll-width grid-width)))
                          (do
-
                            (reset! left new-left))
 
-                           ;(scroll-if-close a click-top click-left))
                          (do
                            (if
                              (<= new-left 0)
                              (reset! left 0))
+
                            (if
                              (<= (- scroll-width grid-width)
                                  new-left)
@@ -323,7 +357,6 @@
                               (> click-top (+ rect-top (/ @height 2))))
                          (do
                            (reset! top new-top))
-                           ;(scroll-if-close a click-top click-left))
                          (if (<= click-top (+ rect-top (/ @height 2)))
                            (reset! top 0)
                            (reset! top (- rect-height @height))))
@@ -332,9 +365,11 @@
 
         on-pan-start (fn [event]
                         (let [position (get-pos event)]; (reset! dragging? true)
+                          (reset! rect (.getBoundingClientRect (get-el "scroll-container")))
                           (reset! dragged? true)
                           (.stopPropagation event)
                           (reset! last-mouse-pos position)
+                          (.log js/console (str @last-mouse-pos))
                           (reset! drag-end-listener on-pan-end)
                           (reset! drag-move-listener on-pan)
                           (reset! scroll-listener scroll-event)
@@ -355,7 +390,7 @@
 
     (reagent/create-class
       {:component-did-mount #(do
-                               (reset! rect (.getBoundingClientRect (get-el "container")))
+
                                (add-event-listener
                                  (get-el id) "touchstart"
                                  on-pan-start)
@@ -370,7 +405,7 @@
                                  (get-el (str id "-resize"))
                                  "touchstart"
                                  mouse-down-resize))
-
+      ;:component-did-update #(reset! rect (.getBoundingClientRect (get-el "container")))
        :reagent-render
        (fn [id]
          [:div.one-event
@@ -389,7 +424,8 @@
                    ;:border-top-right-radius "10px"
                    :width (str (- (- grid-width border-width) 4) "px")
                    :height (str (- @height 3) "px")}}
-          [:div] ;(str @top ":" @left)]
+          [:div (str  (get-service-by-id (:service-id the-event)))]
+                       ;(str @top ":" @left)]
           [:div] ;(str @top-temporary ":" @left-temporary)]
           [:div {:id (str id "-resize")
                  :style {:cursor "ns-resize"
@@ -403,39 +439,52 @@
 
 
 (defn one-person [name]
-      [:div.uk-text-center {:style {:width (str grid-width "px")
-                                    ;:position "absolute"
-                                    :height (str title-height "px")}}
+      [:div.uk-text-center.playfair.gold-text.bold-text
+       {:style {:font-size "1.2em"
+                :width (str grid-width "px")
+                ;:position "absolute"
+                :height (str title-height "px")}}
        name])
 
 
 (defn convert-to-time [number]
-      (let [two-digits (fn [number]
-                           (if (= (count (str number)) 1)
-                             (str "0" number)
-                             (str number)))
-            hours (two-digits (quot number 60))
+      (let [hours (two-digits (quot number 60))
             minutes (two-digits (mod number 60))]
            (str hours ":" minutes)))
 
 
 (defn map-row-title [times]
-      [:div
+      [:div.black-bg {:style {:border-bottom-left-radius "10px"
+                              :border-top-left-radius "10px"}}
        [:div {:style {:height (str title-height "px")}}]
-       (map-indexed #(-> ^{:key %1}[:div.uk-text-justify {:style {:background "white" :width "40px" :height step-height :padding-right "4px"}}
-                                    (convert-to-time %2)])
+       (map-indexed #(-> ^{:key %1}[:div.uk-text-right.uk-text-top
+                                    {:style {:width "40px"
+                                             :transform "translateY(-1px)"
+                                             :line-height "10px"
+                                             :height step-height
+                                             :padding-right "10px"
+                                             :padding-left "10px"}}
+                                    (cond
+                                      (= 0 (mod %2 60))
+                                      [:div.gold-text.bold-text
+                                       {:style {:font-size "0.8em"}}
+                                       (convert-to-time %2)]
+                                      (= 0 (mod %2 30))
+                                      [:div.bold-text.gold-text
+                                       {:style {:font-size "0.7em"}}
+                                       (convert-to-time %2)])])
                     times)])
 
 (defn map-column-title [employees]
-      [:div {:on-mouse-down #()
-             :style {:display "flex"
-                     :position "absolute"
-                     :z-index 2
-                     :background "white"
-                     :top (if @rect (if (> @last-scroll-pos (.-top @rect))
-                                      (- @last-scroll-pos (.-top @rect))
-                                      0)
-                                    0)}}
+      [:div.black-bg
+       {:on-mouse-down #()
+        :style {:display "flex"
+                :position "absolute"
+                :z-index 2
+                :top (if @rect (if (> @last-scroll-pos (.-top @rect))
+                                 (- @last-scroll-pos (.-top @rect))
+                                 0)
+                               0)}}
        (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person a]))
                     employees)])
 
@@ -476,12 +525,25 @@
                                       rows))]))
                     columns)])
 
+
 (defn calendar []
   (let [employees (subscribe [:data :employees])
         services (subscribe [:data :services])
         reservations (subscribe [:data :reservations])
         opening-hours (subscribe [:data :opening-hours])
-        all-columns (fn [] (mapv :name (sort-by :priority @employees)))
+        employees-sorted (fn [] (sort-by :priority @employees))
+        selected-day (subscribe [:data :selected-day])
+
+        get-column-number (fn [id] (first (keep-indexed (fn [index value]
+                                                          (if (= id (:id value))
+                                                            index))
+                                                        (doall (employees-sorted)))))
+        get-row-number (fn [start]
+                         (quot
+                           (- start (first (get @opening-hours @selected-day)))
+                           15))
+
+        all-columns (fn [] (mapv :name (employees-sorted)))
         ;all-columns ["Balazs" "Bela" "Gyozo" "Barber" "Sanyi" "Ferdinand"]
         all-rows (fn [] (take-nth 15 (range (first (:monday @opening-hours))
                                             (second (:monday @opening-hours)))))
@@ -498,14 +560,14 @@
                                                                                              (.setInterval js/window
                                                                                                (fn [b] (set!
                                                                                                          (.-scrollLeft (get-el "scroll-container"))
-                                                                                                         (- (.-scrollLeft (get-el "scroll-container")) 2)))
+                                                                                                         (- (.-scrollLeft (get-el "scroll-container")) 5)))
                                                                                                0.05)))
                                                                  "ArrowRight" (if-not running?
                                                                                       (reset! keydown-interval
                                                                                               (.setInterval js/window
                                                                                                 (fn [b] (set!
                                                                                                           (.-scrollLeft (get-el "scroll-container"))
-                                                                                                          (+ (.-scrollLeft (get-el "scroll-container")) 2)))
+                                                                                                          (+ (.-scrollLeft (get-el "scroll-container")) 5)))
                                                                                                 0.05)))
                                                                  nil))))
                               (add-event-listener js/window "keyup" (fn [a]
@@ -517,7 +579,9 @@
                               ;(dispatch [:init-calendar "container"]))
       :reagent-render
        (fn []
-           [:div.uk-width-1-1 {:style {:display "flex" :padding "50px"}}
+           [:div#calendar.uk-width-1-1 {:style {:display "flex" :padding-left "50px"
+                                                :padding-right "50px"
+                                                :padding-bottom "50px"}}
             [map-row-title (all-rows)]
             [:div#scroll-container {:style {:overflow-x "auto"}}
              [:div#container.uk-inline.noselect
@@ -525,7 +589,17 @@
               [map-column-title (all-columns)]
               [map-calendar (all-rows) (all-columns)]
               ;[:div#event-container {:style {:position "absolute" :height "100%" :width "100%" :background "rgba(0,0,0,0.2)"}}]
-              [one-event "box" 0 0 4]]]])})))
+              (doall
+                (map-indexed
+                  #(-> ^{:key (random-uuid)}
+                       [one-event
+                        (str "box" %1)
+                        (get-column-number (:barber-id %2))
+                        (get-row-number (:start %2))
+                        (/ (:length %2) 15)
+                        %2])
+                  @reservations))]]])})))
+              ;[one-event "box" 0 0 4]]]])})))
               ;[one-event "box2" 8 0 3]
               ;[one-event "box3" 0 44 4]]]])})))
              ;[one-event "box4" 8 44 5]]])})))
@@ -587,23 +661,106 @@
        :reagent-render
        (fn []
            [:div
-
-
             (if @calendar-data-loaded?
               [calendar]
               [:div "Loading screen ide jon"])])})))
 
+(defn open-handler []
+  (let [open? (atom true)]
+    (fn []
+      [:div.trapezium.uk-text-center
+       {:on-click #(do (if @open?
+                         (do (reset! open? (not @open?))
+                             (anim-to
+                               (get-el "sidebar")
+                               0.3
+                               (clj->js {:transform "translateX(-100%)"
+                                         :onComplete (fn [a] (set-gsap (get-el "sidebar") (clj->js {:width "0px"})))})))
+                         (do (reset! open? (not @open?))
+                             (do (set-gsap
+                                   (get-el "sidebar")
+                                   (clj->js {:width "340px"}))
+                                 (anim-to
+                                   (get-el "sidebar")
+                                   0.3
+                                   (clj->js {:transform "translateX(0%)"}))))))}
+       [:span {:data-uk-icon (str "ratio: 1.5; icon: " (if @open? "chevron-left" "chevron-right"))}]])))
+
+(defn calendar-sidebar []
+  (let [shop-data (subscribe [:data :user-data])
+        selected-date (subscribe [:data :selected-date])]
+    (fn []
+      [:div#sidebar {:style {:background "#222" :width "340px"}}
+       ;(str @shop-data)
+       [:div#sidebar-inner {:style {:height "100vh" :position "fixed" :width "340px"}}
+                              ;:transform "translateX(-100%)"}}
+        [:div.uk-inline.uk-padding-small {:style {:height "100%"}} ;:overflow "hidden"}}
+         [open-handler]
+         [:div#blocks
+          [:div.uk-padding.uk-padding-remove-bottom.uk-padding-remove-top
+           [:img.uk-align-center.uk-margin-remove-bottom {:src "logo/szeged.png"}]]
+          [flatpickr {:value @selected-date :options {:inline true :onChange (fn [selected-dates date-str instance]
+                                                                               (dispatch [:select-date date-str]))}}]]]]])))
+
+
+(defn this-date []
+  (let [selected-date (subscribe [:data :selected-date])
+        selected-day (subscribe [:data :selected-day])
+        day-name (fn [day-key]
+                   (case day-key
+                     :monday "Hétfő"
+                     :tuesday "Kedd"
+                     :wednesday "Szerda"
+                     :thursday "Csütörtök"
+                     :friday "Péntek"
+                     :saturday "Szombat"
+                     :sunday "Vasárnap"
+                     "unknown"))
+        month-name (fn [month-number]
+                     (case month-number
+                       "01" "Január"
+                       "02" "Február"
+                       "03" "Március"
+                       "04" "Április"
+                       "05" "Május"
+                       "06" "Június"
+                       "07" "Július"
+                       "08" "Augusztus"
+                       "09" "Szeptember"
+                       "10" "Október"
+                       "11" "November"
+                       "12" "December"
+                       "unknown"))
+        date-in-str (fn [] (let [[year month day] (clojure.string/split @selected-date #"-")]
+                             (str (month-name month) " " day)))]
+    [:div.uk-flex.uk-flex-center.gold-text.playfair.uk-text-center.uk-padding.uk-padding-bottom-remove.noselect
+     {:style {:align-items "center"}}
+     [:div.uk-margin-small-right {:on-click #(dispatch [:select-date (get-yesterday @selected-date)])
+                                  :style {:cursor "pointer"}
+                                  :data-uk-icon "ratio:1.5; icon: chevron-left"}]
+     [:div [:div
+            {:style {:font-size "1.8em"}}
+            (date-in-str)]
+           [:div
+            {:style {:font-size "1.5em"}}
+            (day-name @selected-day)]]
+     [:div.uk-margin-small-left {:on-click #(dispatch [:select-date (get-tomorrow @selected-date)])
+                                 :style {:cursor "pointer"}
+                                 :data-uk-icon "ratio:1.5; icon: chevron-right"}]]))
 
 (defn calendar-page []
-  (let [date (atom "2019-01-01")
-        websocket? (subscribe [:data :websocket?])]
-    (fn []
-       [:div
+  (let [websocket? (subscribe [:data :websocket?])
+        reservations (subscribe [:data :reservations])]
 
-        [:div.uk-width-1-1 {:style {:background "#222"}}
-         [flatpickr {:value @date :options {:inline true}}]]
-        (if @websocket?
-          [calendar-loader])])))
+    (fn []
+       [:div.uk-width-1-1 {:style {:background "url('/main.jpg')"}}
+        [:div.uk-flex
+         [calendar-sidebar]
+
+         [:div.uk-width-expand
+          [this-date]
+          (if @websocket?
+            [calendar-loader])]]])))
 
 (defn current-page []
   (fn []
@@ -626,6 +783,3 @@
                 [home-page]])
       [:div
        [calendar-page]])))
-
-
-[{:_id "5c5895f3264661cd54af882c", :id 1, :name "Balázs", :priority 0} {:_id "5c5895fb264661cd54af882d", :id 2, :name "Józsi", :priority 1} {:_id "5c589602264661cd54af882e", :id 3, :name "Sanyi", :priority 2} {:_id "5c589611264661cd54af8830", :id 5, :name "Fecó", :priority 3} {:_id "5c589618264661cd54af8831", :id 6, :name "Győző", :priority 4} {:_id "5c58961e264661cd54af8832", :id 7, :name "Márk", :priority 5} {:_id "5c589627264661cd54af8833", :id 8, :name "Martin", :priority 11} {:_id "5c76c2e8bdf1993a82d3c493", :name "Dávid", :id 9, :priority 6} {:_id "5c76c308bdf1993a82d3c494", :name "Máté", :id 10, :priority 7} {:_id "5c76c30cbdf1993a82d3c495", :name "Tomi", :id 11, :priority 8} {:_id "5d43fd4ebdf1992f5c40b27e", :name "Marci", :priority 9, :id 12} {:_id "5d5eca59bdf19901f7f72635", :name "Boldizsár", :priority 10, :id 13}]

@@ -16,8 +16,9 @@
               (@server)
               (reset! server nil))
     (reset! server (run-server (wrap-reload #'app)
-                               {:port port :join? false}))
-    (handler/start-router!)))
+                               {:port port :join? false}))))
+    ;(handler/stop-router!)
+    ;(handler/start-router!)))
 
 (defn dev []
   (-main)

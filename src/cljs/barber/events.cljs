@@ -9,6 +9,20 @@
     [cljs.reader :as reader :refer [read-string]]))
 
 
+(defn get-day-from-date [year month day]
+  (let [date (new js/Date year (dec month) day)
+        day-code (.getDay date)]
+    (case day-code
+      1 :monday
+      2 :tuesday
+      3 :wednesday
+      4 :thursday
+      5 :friday
+      6 :saturday
+      0 :sunday
+      :unknown)))
+
+
 (defn ajax-get [{:keys [url handler error-handler]}]
   (GET url
     {:handler handler
@@ -180,23 +194,30 @@
 
 (reg-event-fx
   :get-reservations
-  (fn [_]
+  (fn [cofx [_ date]]
       {:chsk {:event-key :calendar/get-day
-              :data "2019-09-02"
-              :callback #(dispatch [:assoc-data-to-key :reservations %])}}))
+              :data date
+              :callback #(do
+                           (.log js/console (str date))
+                           (dispatch [:assoc-data-to-key :reservations %]))}}))
 
 (reg-event-fx
   :get-employees
   (fn [_]
       {:chsk {:event-key :employees/get-all
-              :callback #(do (.log js/console "wtf")
-                             (dispatch [:assoc-data-to-key :employees %]))}}))
+              :callback #(dispatch [:assoc-data-to-key :employees %])}}))
 
 (reg-event-fx
   :get-services
   (fn [_]
       {:chsk {:event-key :services/get-all
               :callback #(dispatch [:assoc-data-to-key :services %])}}))
+
+(reg-event-fx
+  :get-user-data
+  (fn [_]
+    {:chsk {:event-key :user/get
+            :callback #(dispatch [:assoc-data-to-key :user-data %])}}))
 
 (reg-event-fx
   :get-opening-hours
@@ -208,10 +229,20 @@
   :get-calendar-data
   (fn [db [_]]
       (dispatch [:get-opening-hours])
+      (dispatch [:get-user-data])
       (dispatch [:get-services])
       (dispatch [:get-employees])
-      (dispatch [:get-reservations])
+      (dispatch [:get-server-time])
       db))
+
+(reg-event-db
+  :select-date
+  (fn [db [_ date]]
+    (dispatch [:get-reservations date])
+    (assoc db :selected-date date
+              :selected-day (apply get-day-from-date
+                                   (clojure.string/split date #"-")))))
+
 
 
 (reg-event-fx
@@ -219,7 +250,8 @@
   (fn [_]
       {:ajax {:method :get
               :url "/server-time"
-              :handler #(dispatch [:add-to-db {:server-time %}])
+              :handler #(do
+                          (dispatch [:select-date (first (read-string %))]))
               :error-handler #(.log js/console "Failed to get server-time")}}))
 
 (reg-event-fx

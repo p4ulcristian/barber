@@ -21,7 +21,7 @@
 (reg-sub
   :calendar-data-loaded?
   (fn [db [_ the-key]]
-      (if (and (:reservations db)
+      (if (and ;(:reservations db)
                (:employees db)
                (:services db)
                (:opening-hours db))

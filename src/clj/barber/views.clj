@@ -16,13 +16,14 @@
 (defn head []
   "Head with some metatags"
   [:head
-   [:title "Barber"]
+   [:title "BarbershopBP"]
    [:link {:rel "icon" :href "/favicon.png" :type "image/png"}]
    [:meta {:charset "utf-8"}]
    [:meta {:name "viewport"
            :content "width=device-width, initial-scale=1"}]
    (include-css "/css/uikit.min.css")
    (include-css "css/flatpickr.min.css")
+   (include-css "https://fonts.googleapis.com/css?family=Playfair+Display+SC&display=swap")
    (include-css "/css/site.css")])
 
 (defn loading-page []
