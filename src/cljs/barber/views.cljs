@@ -131,13 +131,14 @@
       (:name (first (filter #(= id (:_id %))
                             (services)))))))
 
+
+(defonce dragged? (atom false))
+
 (defn one-event [id start-left start-top start-height the-event]
   (let [drag-end-listener (atom nil)
         drag-move-listener (atom nil)
         scroll-listener (atom nil)
         not-real-scroll? (atom false)
-        dragged? (atom false)
-
 
         last-mouse-pos (atom [0 0])
 
@@ -390,7 +391,7 @@
 
     (reagent/create-class
       {:component-did-mount #(do
-
+                               (reset! rect (.getBoundingClientRect (get-el "scroll-container")))
                                (add-event-listener
                                  (get-el id) "touchstart"
                                  on-pan-start)
@@ -475,18 +476,25 @@
                                        (convert-to-time %2)])])
                     times)])
 
+(defn only-positive [number]
+  (if (< number 0)
+    0
+    number))
+
 (defn map-column-title [employees]
-      [:div.black-bg
-       {:on-mouse-down #()
-        :style {:display "flex"
-                :position "absolute"
-                :z-index 2
-                :top (if @rect (if (> @last-scroll-pos (.-top @rect))
-                                 (- @last-scroll-pos (.-top @rect))
-                                 0)
-                               0)}}
-       (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person a]))
-                    employees)])
+      (let [offset-top (.-offsetTop (.getElementById js/document "scroll-container"))]
+        (fn [employees]
+          [:div.black-bg
+           {:on-mouse-down #()
+            :style {:display "flex"
+                    :position "absolute"
+                    :z-index 2
+                    :top (if @rect (if (> @last-scroll-pos offset-top)
+                                     (- @last-scroll-pos offset-top)
+                                     0)
+                                   0)}}
+           (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person a]))
+                        employees)])))
 
 (defn make-calendar-rows-and-columns [rows columns]
       [:div
@@ -550,7 +558,9 @@
         keydown-interval (atom nil)]
     (reagent/create-class
      {:component-did-mount #(do
-                              ;(add-event-listener js/window "scroll" (fn [a] (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document)))))
+                              (add-event-listener js/window "scroll" (fn [a]
+                                                                       (if-not @dragged?
+                                                                         (reset! last-scroll-pos (.-scrollTop (.-documentElement js/document))))))
                               (add-event-listener js/window "keydown"
                                                   (fn [a]
                                                       (let [running? (if @keydown-interval true false)]
