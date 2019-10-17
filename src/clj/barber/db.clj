@@ -48,12 +48,13 @@
                 opening-hours))
 
 
-     (defn get-day-from-calendar [day request]
+     (defn get-reservations-and-breaks-from-calendar [day request]
            (let [shop-id (get-shop-id request)
                  all-days (mc/find-maps db (str shop-id "_calendar") {:date day})
                  only-reservations  (mapv #(assoc (second %) :reservation-id (first %))
                                           (reduce merge (map :reservations all-days)))]
-                only-reservations))
+                {:breaks {1 true}
+                 :reservations only-reservations}))
 
      (defn get-employees [request]
            (let [shop-id (get-shop-id request)

@@ -7,6 +7,11 @@
             user-select: none; /* Non-prefixed version, currently
                                   supported by Chrome and Opera */
 }
+
+::-webkit-scrollbar {
+    display: none;
+}
+
 .flatpickr-input{
 display: none;}
 
@@ -38,4 +43,14 @@ font-weight: 800;
     color: white;
     line-height: 100px;
     cursor: pointer;
+}
+
+.one-calendar-cell{
+transition: 0.2s background ease;
+cursor:pointer;
+}
+
+.one-calendar-cell:hover{
+background: lightgrey!important;
+transition: 0.2s background linear;
 }

@@ -206,9 +206,9 @@
 
   ;Calendar events
 
-  (defmethod -sente-messages :calendar/get-day
+  (defmethod -sente-messages :calendar/get-reservations-and-breaks
                 [{:as ev-msg :keys [?reply-fn ?data ring-req]}]
-                (?reply-fn (db/get-day-from-calendar ?data ring-req)))
+                (?reply-fn (db/get-reservations-and-breaks-from-calendar ?data ring-req)))
 
   (defmethod -sente-messages :calendar/add-event
              [{:as ev-msg :keys [?reply-fn]}]

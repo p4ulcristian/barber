@@ -193,37 +193,51 @@
 
 
 (reg-event-fx
-  :get-reservations
+  :get-reservations-and-breaks
   (fn [cofx [_ date]]
-      {:chsk {:event-key :calendar/get-day
+      {:dispatch [:inc-loader]
+       :chsk {:event-key :calendar/get-reservations-and-breaks
               :data date
               :callback #(do
-                           (.log js/console (str date))
-                           (dispatch [:assoc-data-to-key :reservations %]))}}))
+                           (dispatch [:dec-loader])
+                           (dispatch [:assoc-data-to-key :reservations (:reservations %)])
+                           (dispatch [:assoc-data-to-key :breaks (:breaks %)]))}}))
 
 (reg-event-fx
   :get-employees
   (fn [_]
-      {:chsk {:event-key :employees/get-all
-              :callback #(dispatch [:assoc-data-to-key :employees %])}}))
+      {:dispatch [:inc-loader]
+       :chsk {:event-key :employees/get-all
+              :callback #(do
+                           (dispatch [:dec-loader])
+                           (dispatch [:assoc-data-to-key :employees %]))}}))
 
 (reg-event-fx
   :get-services
   (fn [_]
-      {:chsk {:event-key :services/get-all
-              :callback #(dispatch [:assoc-data-to-key :services %])}}))
+      {:dispatch [:inc-loader]
+       :chsk {:event-key :services/get-all
+              :callback #(do
+                           (dispatch [:dec-loader])
+                           (dispatch [:assoc-data-to-key :services %]))}}))
 
 (reg-event-fx
   :get-user-data
   (fn [_]
-    {:chsk {:event-key :user/get
-            :callback #(dispatch [:assoc-data-to-key :user-data %])}}))
+    {:dispatch [:inc-loader]
+     :chsk {:event-key :user/get
+            :callback #(do
+                         (dispatch [:dec-loader])
+                         (dispatch [:assoc-data-to-key :user-data %]))}}))
 
 (reg-event-fx
   :get-opening-hours
   (fn [_]
-      {:chsk {:event-key :shop/opening-hours
-              :callback #(dispatch [:assoc-data-to-key :opening-hours %])}}))
+      {:dispatch [:inc-loader]
+       :chsk {:event-key :shop/opening-hours
+              :callback #(do
+                           (dispatch [:dec-loader])
+                           (dispatch [:assoc-data-to-key :opening-hours %]))}}))
 
 (reg-event-db
   :get-calendar-data
@@ -235,10 +249,27 @@
       (dispatch [:get-server-time])
       db))
 
+
+(reg-event-db
+  :dec-loader
+  (fn [db [_]]
+    (if (= 1 (:loader-count db))
+      (let [element (.getElementById js/document "x-loader")]
+        (.add (.-classList element) "animated-hide")
+        (.setTimeout js/window
+                     #(aset (.-style element) "display" "none")
+                     2000)))
+    (assoc db :loader-count (dec (:loader-count db)))))
+
+(reg-event-db
+  :inc-loader
+  (fn [db [_]]
+    (assoc db :loader-count (inc (:loader-count db)))))
+
 (reg-event-db
   :select-date
   (fn [db [_ date]]
-    (dispatch [:get-reservations date])
+    (dispatch [:get-reservations-and-breaks date])
     (assoc db :selected-date date
               :selected-day (apply get-day-from-date
                                    (clojure.string/split date #"-")))))
@@ -300,7 +331,7 @@
 
   ;; the event handler (function) being registered
   (fn [{:keys [db local-store-todos]} _]                  ;; take 2 values from coeffects. Ignore event vector itself.
-    {:db (assoc default-db :todos local-store-todos)}))   ;; all hail the new state to be put in app-db
+    {:db (assoc default-db :todos local-store-todos :loader-count 0)}))   ;; all hail the new state to be put in app-db
 
 
 ;; usage:  (dispatch [:set-showing  :active])
