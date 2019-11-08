@@ -4,12 +4,91 @@
             [re-frame.core :refer [subscribe dispatch]]
             [clojure.string :as str]
             [cljs-time.core :as time]
+            [react-flatpickr :default Flatpickr]
+            [react-beautiful-dnd :refer (DragDropContext Droppable Draggable)]))
 
-            [react-flatpickr :default Flatpickr]))
+
+            ;[cljsjs.react-beautiful-dnd :refer [DragDropContext Droppable Draggable]]))
+
+
+
+;(def drag-drop-context (reagent/adapt-react-class DragDropContext))
+
+
+(comment (defn netflix-counter [id content props]
+           (reagent/create-class
+             {:component-did-mount #(dispatch [:netflix-counter-init id])
+              :component-did-update #(dispatch [:netflix-counter id])
+              :reagent-render (content props)})))
 
 
 (defn flatpickr [props]
   [:> Flatpickr props])
+
+
+
+;(def drag-drop-context (reagent/adapt-react-class DragDropContext))
+;(def droppable (reagent/adapt-react-class Droppable))
+;(def draggable (reagent/adapt-react-class Draggable))
+
+; Example drag-drop-context (typically wraps your whole app)
+
+
+(defn drag-drop-context [component {:keys [on-drag-start on-drag-update on-drag-end]}]
+  (let []
+    [:> DragDropContext
+     {:onDragStart  on-drag-start
+      :onDragUpdate on-drag-update
+      :onDragEnd    on-drag-end}
+     component]))
+
+
+
+(defn droppable-employees [component]
+  [:> Droppable {:droppable-id "employees" :type "thing"}
+   (fn [provided snapshot]
+     (reagent/as-element
+       [:div (merge {:ref   (.-innerRef provided)
+                     :class (when (.-isDraggingOver snapshot) :drag-over)}
+                    (js->clj (.-droppableProps provided)))
+        [:h2 "Barberek"]
+        (.-placeholder provided)
+        component]))])
+
+
+
+
+(defn draggable-employee [data]
+  (let [idx (:priority data)]
+    [:> Draggable
+     {:draggable-id (str "draggable-" idx)
+      :index idx}
+     (fn [provided snapshot]
+       (reagent/as-element [:div
+                            (merge {;:style {:background "white"}
+                                    :ref (.-innerRef provided)}
+                                   (js->clj (.-draggableProps provided))
+                                   (js->clj (.-dragHandleProps provided)))
+                            (str (:name data) " - " (number? idx))]))]))
+
+(comment (defn drag-drop-context [component id]
+           [:> Droppable {:droppable-id id :type "thing"}
+            (fn [provided snapshot]
+              (reagent/as-element component))]))
+
+(defn proba-dnd []
+  (let [employees (subscribe [:data :employees])]
+    [:div.uk-padding {:style {:height "900px"}}
+     [drag-drop-context
+      [droppable-employees ;{:droppable-id "droppable-1" :type "thing"}
+       (map-indexed
+         #(-> ^{:key (:priority %2)}
+              [draggable-employee %2])
+         @employees)]]]))
+
+
+
+
 
 (defn two-digits [number]
   (if (= (count (str number)) 1)
@@ -81,7 +160,7 @@
 (def grid-width 130)
 (def grid-height 100)
 (def step-height (/ grid-height 4))
-(def border-width 1)
+(def border-width 1.2)
 (def title-height 30)
 
 
@@ -127,9 +206,8 @@
 
 (defn get-service-by-id [id]
   (let [services (fn [] (deref (subscribe [:data :services])))]
-    (str
-      (:name (first (filter #(= id (:_id %))
-                            (services)))))))
+    (first (filter #(= id (:_id %))
+                   (services)))))
 
 
 
@@ -142,7 +220,6 @@
         not-real-scroll? (atom false)
         dragged? (atom false)
         last-mouse-pos (atom [0 0])
-
         calc-left (* start-left grid-width)
         calc-top (* start-top step-height)
         left-temporary (atom 0)
@@ -151,8 +228,6 @@
         height (atom (* start-height step-height))
         left (atom calc-left)
         top (atom calc-top)
-
-
         remove-mouse-move (fn [] (remove-event-listener js/window "mousemove" @drag-move-listener))
         remove-mouse-up (fn [] (remove-event-listener js/window "mouseup" @drag-end-listener))
         remove-touch-move (fn [] (remove-event-listener js/window "touchmove" @drag-move-listener))
@@ -407,7 +482,7 @@
       ;:component-did-update #(reset! rect (.getBoundingClientRect (get-el "container")))
        :reagent-render
        (fn [id]
-         [:div.one-event
+         [:div.one-event.uk-inline
           {:class (if @dragged? "active" "")
            :id id
            :style {:overflow "hidden"
@@ -415,7 +490,7 @@
                    :z-index (if @dragged? 1000 1)
                    :cursor  (if @dragged? "grabbing" "grab")
                    :left 0
-                   :padding-top "5px"
+                   :padding-left "5px"
                    :top 0
                    :border-top-right-radius "10px"
                    :border-bottom-right-radius "5px"
@@ -423,27 +498,38 @@
                    :border-bottom-left-radius "10px"
                    :transform (str "translate(" (+ 3 @left) "px," (+ 3 (+ title-height @top))
                                    "px)")
+                   :transition "0.01s transform ease"
                    :position "absolute" :background "rgb(255, 204, 71)"
                    :border "0.5px solid #222"
                    :opacity (if @dragged? 1 1)
                    ;:border-top-right-radius "10px"
                    :width (str (- (- grid-width border-width) 8) "px")
-                   :height (str (- @height 9) "px")}}
-          [:div {:style {:font-weight "bold"
-                         :font-size "12px"
-                         :padding-left "5px"
-                         :line-height "12px"}}
-           (str (:name the-event))]
-          [:div
-           {:style {:padding-left "5px"
-                    :font-style "italic"
-                    :font-size "10px"
-                    :line-height "12px"}}
-           (str (get-service-by-id (:service-id the-event)))]
+                   :height (str (- @height 7) "px")}}
+          [:div {:style {:height "100%" :background (:color (get-service-by-id (:service-id the-event)))
+                         :width "5px" :z-index 2 :position "absolute" :left 0}}]
+          [:div {:style {:padding-top "5px"
+                         :padding-left "5px"}}
+
+           [:div {:style {:font-size "12px"
+                          :font-weight "bold"
+                          :line-height "12px"}}
+            (str (:name the-event))]
+           [:div
+             {:style {:font-style "italic"
+                      :font-size "10px"
+                      :line-height "12px"}}
+             (str (:name (get-service-by-id (:service-id the-event))))]]
           [:div {:id (str id "-resize")
                  :style {:cursor "ns-resize"
-                         :background "rgb(120, 204, 10)" :height "5px" :width (- (- grid-width border-width) 4)
-                         :bottom 0 :position "absolute" :z-index 1000}}]])})))
+                         :height "10px" :width (- (- grid-width border-width) 4)
+                         :bottom 0 :position "absolute" :z-index 1000}}]
+          [:div.uk-position-top-right.edit-button
+           [:div {:style {:padding "5px"
+                          :background "white"
+                          :border-radius "5px"
+                          :cursor "pointer"}
+                  :on-click (dispatch [:add-to-db {:reservation-editor the-event}])}
+            [:span {:data-uk-icon "file-edit"}]]]])})))
 
 
 
@@ -451,9 +537,10 @@
 
 
 
-(defn one-person [name]
+(defn one-person [name id]
       [:div.uk-text-center.playfair.gold-text.bold-text
-       {:style {:font-size "1.2em"
+       {:data-uk-tooltip (str "title: id: " id)
+        :style {:font-size "1.2em"
                 :width (str grid-width "px")
                 ;:position "absolute"
                 :height (str title-height "px")}}
@@ -497,47 +584,74 @@
       (let [container (fn [] (if (.getElementById js/document "scroll-container") (.getElementById js/document "scroll-container") nil))
             offset-top (fn [] (if (container) (.-offsetTop (container)) 0))]
         (fn [employees]
-          [:div.black-bg
-           {:on-mouse-down #()
-            :style {:display "flex"
+          [:div.black-bg.column-titles
+           {:style {:display "flex"
                     :position "absolute"
                     :z-index 2
-                    :top (if @rect (if (> @last-scroll-pos (offset-top))
-                                     (- @last-scroll-pos (offset-top))
-                                     0)
-                                   0)}}
-           (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person a]))
-                        (mapv :name employees))])))
+                    :transform (str "translateY(" (if @rect (if (> @last-scroll-pos (offset-top))
+                                                              (- @last-scroll-pos (offset-top))
+                                                              0)
+                                                            0)"px)")}}
+           (map-indexed (fn [col-i a] (-> ^{:key col-i}[one-person (:name a) (:id a)]))
+                        employees)])))
 
+
+(defn check-if-in-range [breaks this]
+  "Decides if this cell is a brake"
+  (if (some #(let [start (first %)
+                   finish (second %)]
+               (and (>= this start) (< this finish)))
+            breaks)
+    true
+    false))
+
+
+(defn is-break? [breaks this-time]
+  "decides if this is a brake with getting from @breaks"
+  (let []
+    (if breaks
+      (check-if-in-range breaks this-time)
+      true)))
+
+(defn one-cell [col-i employee row-i time]
+  (let [];breaks (subscribe [:breaks (:id employee)])]
+    [:div.one-cell
+     {:on-click #(do
+                   (dispatch [:add-to-db {:sidebar-open? true}])
+                   (dispatch [:add-to-db {:reservation-editor {:meh "meh"}}]))
+      :style {:cursor "pointer"
+              :width (str (- grid-width border-width) "px")
+              :height (str (- step-height border-width) "px")
+              :border-right (str border-width "px solid #222")
+              :border-top (if (= 0 (mod row-i 4))
+                            (str border-width "px solid #222")
+                            (if (= 0 (mod row-i 2))
+                              (str border-width "px solid silver")
+                              (str border-width "px solid transparent")))}}]))
 
 
 (defn map-calendar [rows columns]
       [:<>
-       (map-indexed (fn [col-i a]
+       (map-indexed (fn [col-i employee]
                         (-> ^{:key col-i}
-                            [:div
-                             [:div {:style {:height (str title-height "px")}}]
+                            [:div {:style {:background "white"}}
+                             [:div {:style { :height (str title-height "px")}}]
                              (doall
                                (map-indexed
-                                      (fn [row-i b]
+                                      (fn [row-i time]
                                           (-> ^{:key row-i}
-                                              [:div.one-calendar-cell
-                                               {:on-click #(.log js/console (str col-i " " row-i " : " a))
-                                                :style {:background (if (= 0 (mod col-i 3))  "#ccc" "white")
-                                                        :width (str (- grid-width border-width) "px")
-                                                        :height (str (- step-height border-width) "px")
-                                                        :border-right (str border-width "px solid lightgrey")
-                                                        :border-top (if (= 0 (mod row-i 4))
-                                                                      (str border-width "px solid #222")
-                                                                      (if (= 0 (mod row-i 2))
-                                                                        (str border-width "px solid silver")
-                                                                        (str border-width "px solid transparent")))}}]))
+                                              [one-cell col-i employee row-i time]))
                                       rows))]))
                     columns)])
 
 (defn actual-time-sign [container]
   (let [elapsed-time (atom 0)
-        now (new js/Date)
+        now (new js/Date 2019 9 16 18 0 0)
+        day (.getDate now)
+        month (two-digits (inc (.getMonth now)))
+        year (.getFullYear now)
+        str-date (str year "-" month "-" day)
+        selected-date (subscribe [:data :selected-date])
         minutes (.getMinutes now)
         hours (.getHours now)
         in-minutes (+ minutes (* hours 60))
@@ -555,29 +669,42 @@
                                                              60000))
        :reagent-render
        (fn []
-         [:div#actual-time
-          {:style {:top (str  (min (+
-                                     (* one-minute-step (get-pos-now))
-                                     (* one-minute-step @elapsed-time)
-                                     title-height)
-                                   (+ title-height
-                                      (-
-                                        (* one-minute-step
-                                           (- (second (get @opening-hours @selected-day))
-                                              (first (get @opening-hours @selected-day))))
-                                        height)))
-                              "px")
-                   :position "absolute"
+         (if (= @selected-date str-date)
+           [:div#actual-time
+            {:style {:top (str  (min (+
+                                       (* one-minute-step (get-pos-now))
+                                       (* one-minute-step @elapsed-time)
+                                       title-height)
+                                     (+ title-height
+                                        (-
+                                          (* one-minute-step
+                                             (- (second (get @opening-hours @selected-day))
+                                                (first (get @opening-hours @selected-day))))
+                                          height)))
+                                "px")
+                     :position "absolute"
 
-                   :z-index 100
-                   :width (if @container
-                            (str (.-scrollWidth @container) "px")
-                            "50px")
-                   :height (str height "px")
-                   :background "orange"}}])})))
+                     :z-index 100
+                     :width (if @container
+                              (str (.-scrollWidth @container) "px")
+                              "50px")
+                     :height (str height "px")
+                     :background "orange"}}]))})))
 
 
+(defn one-break [column row length]
+  (let [calc-left (* column grid-width)
+        calc-top (* row step-height)]
+    [:div.break
+     {:style {;:background "lightgrey"
+              :width (str (- grid-width border-width)
+                          "px")
+              :height (str (* length step-height)
+                           "px")
 
+              :position "absolute"
+              :transform (str "translate(" calc-left "px," (+ title-height calc-top)
+                              "px)")}}]))
 
 
 (defn calendar []
@@ -585,7 +712,6 @@
         employees (subscribe [:data :employees])
         services (subscribe [:data :services])
         reservations (subscribe [:data :reservations])
-        breaks (subscribe [:data :breaks])
         opening-hours (subscribe [:data :opening-hours])
         employees-sorted (fn [] (sort-by :priority @employees))
         selected-day (subscribe [:data :selected-day])
@@ -597,14 +723,14 @@
                          (quot
                            (- start (first (get @opening-hours @selected-day)))
                            15))
-
         all-columns (fn [] (employees-sorted))
-        ;all-columns ["Balazs" "Bela" "Gyozo" "Barber" "Sanyi" "Ferdinand"]
         all-rows (fn [] (take-nth 15 (range (first (:monday @opening-hours))
                                             (second (:monday @opening-hours)))))
-        keydown-interval (atom nil)]
+        keydown-interval (atom nil)
+        breaks (subscribe [:data :breaks])]
     (reagent/create-class
-     {:component-did-update #(reset! container (get-el "container"))
+     {:component-did-update #(do
+                               (reset! container (get-el "container")))
       :component-did-mount #(do
                               (dispatch [:dec-loader])
                               (reset! container (get-el "container"))
@@ -642,7 +768,7 @@
            [:div#calendar.uk-width-1-1 {:style {:display "flex"
                                                 :padding-left "40px"
                                                 :padding-right "30px"
-                                                :padding-bottom "10px"}}
+                                                :padding-bottom "100px"}}
             [map-row-title (all-rows)]
             [:div#scroll-container {:style {:overflow-x "auto"}}
 
@@ -651,24 +777,32 @@
               [actual-time-sign container]
               [map-column-title (all-columns)]
               [map-calendar (all-rows) (all-columns)]
-              ;[:div#event-container {:style {:position "absolute" :height "100%" :width "100%" :background "rgba(0,0,0,0.2)"}}]
-
-              (str @breaks)
               (doall
-                (map-indexed
-                  #(-> ^{:key (random-uuid)}
-                       [one-event
-                        (str "box" %1)
-                        (get-column-number (:barber-id %2))
-                        (get-row-number (:start %2))
-                        (/ (:length %2) 15)
-                        %2])
-                  @reservations))]]])})))
+                (map-indexed #(-> ^{:key %1}
+                                  [one-event
+                                   (str "box" %1)
+                                   (get-column-number (:employee %2))
+                                   (get-row-number (:start %2))
+                                   (/ (:length %2) 15)
+                                   %2])
+                  @reservations))
+              (doall
+                (map (fn [[barber barber-breaks]]
+                       (doall
+                         (if (vector? barber-breaks)
+                           (map (fn [one-break-data]
+                                  (-> ^{:key (random-uuid)}
+                                      [one-break
+                                       (get-column-number barber)
+                                       (get-row-number (first one-break-data))
+                                       (/ (- (second one-break-data)
+                                             (first one-break-data))
+                                          15)]))
+                             barber-breaks))))
+                     @breaks))]]])})))
 
-              ;[one-event "box" 0 0 4]]]])})))
-              ;[one-event "box2" 8 0 3]
-              ;[one-event "box3" 0 44 4]]]])})))
-             ;[one-event "box4" 8 44 5]]])})))
+
+
 
 
 
@@ -681,7 +815,9 @@
           (fn []
             [:div
              [:div.uk-container.uk-container-small.uk-margin-large-top
-              [:div.uk-card.uk-card-default [calendar]]
+              [:div.uk-card.uk-card-default
+               ;[proba-dnd]
+               [calendar]]
               [:div.uk-card.uk-card-default
                [:div.uk-card-body
                 [:div [:img.uk-align-center {:src "/img/logo.png" :style {:width "150px"}}]]
@@ -721,8 +857,7 @@
                 ;[todo-app]]]]])})))
 
 (defn calendar-loader []
-  (let [loader-count (subscribe [:data :loader-count])
-        calendar-data-loaded? (subscribe [:calendar-data-loaded?])]
+  (let [calendar-data-loaded? (subscribe [:calendar-data-loaded?])]
     (reagent/create-class
       {:component-did-mount #(do
                                (dispatch [:inc-loader])
@@ -730,51 +865,133 @@
        :reagent-render
        (fn []
            [:div
-            (if @calendar-data-loaded?
-              [calendar]
-              [:div "Loading screen ide jon"])])})))
+            [calendar]])})))
 
-(defn open-handler []
-  (let [open? (atom true)]
-    (fn []
-      [:div.trapezium.uk-text-center
-       {:on-click #(do (if @open?
-                         (do (reset! open? (not @open?))
-                             (anim-to
-                               (get-el "sidebar")
-                               0.3
-                               (clj->js {:transform "translateX(-100%)"
-                                         :onComplete (fn [a] (set-gsap (get-el "sidebar") (clj->js {:width "0px"})))})))
-                         (do (reset! open? (not @open?))
-                             (do (set-gsap
-                                   (get-el "sidebar")
-                                   (clj->js {:width "340px"}))
-                                 (anim-to
-                                   (get-el "sidebar")
-                                   0.3
-                                   (clj->js {:transform "translateX(0%)"}))))))}
-       [:span {:data-uk-icon (str "ratio: 1.5; icon: " (if @open? "chevron-left" "chevron-right"))}]])))
+(def input-width "225px")
+
+(defn input-wrapper [content])
+
+
+(defn simple-input [{:keys [placeholder]}]
+  [:div.uk-align-center.uk-margin-remove-bottom {:style {:margin-top "5px" :width input-width}}
+   [:label.uk-form-label.gold-text.bold-text {:for "form-stacked-text"} placeholder]
+   [:div.uk-form-controls
+    [:input#form-stacked-text.uk-input.rounded {:type "text"}]]])
+  ;[:div.res-input
+   ;[:input.uk-input.uk-width-medium {:placeholder placeholder}]])
+
+(defn date-input [{:keys [placeholder]}]
+  [:div.uk-align-center.uk-margin-remove-bottom {:style {:margin-top "5px" :width input-width}}
+   [:label.uk-form-label.gold-text.bold-text {:for "form-stacked-text"} placeholder]
+   [:div.uk-form-controls
+    [:input#form-stacked-text.uk-input.rounded {:type "date"}]]])
+
+
+(defn time-input [{:keys [placeholder]}]
+  [:div.uk-align-center.uk-margin-remove-bottom {:style {:margin-top "5px" :width input-width}}
+   [:label.uk-form-label.gold-text.bold-text {:for "form-stacked-text"} placeholder]
+   [:div.uk-form-controls
+    [:input#form-stacked-text.uk-input.rounded {:type "time"}]]])
+
+(defn select-employee []
+  [:div.uk-align-center.uk-margin-remove-bottom {:style {:margin-top "5px" :width input-width}}
+   [:label.uk-form-label.gold-text.bold-text {:for "form-stacked-text"} "Barber"]
+   [:div.uk-form-controls
+    [:select.uk-select.rounded
+     [:option {:value "volvo"} "Volvo"]
+     [:option {:value "saab"} "Saab"]
+     [:option {:value "mercedes"} "Mercedes"]
+     [:option {:value "audi"} "Audi"]]]])
+
+
+(defn reservation-editor [data-atom]
+  (let [editor-atom (atom @data-atom)]
+    [:div
+     [:div.uk-text-center.gold-text {:style {:font-size "1.7em" :margin-bottom "20px" :margin-top "10px"}}
+      (if (contains? @editor-atom :reservation-id)
+        "Módosítás"
+        "Új foglalás")]
+     [:form.uk-form-stacked
+      [:div
+       [simple-input {:placeholder "Név"} @editor-atom :name]
+       [simple-input {:placeholder "E-mail"} @editor-atom :email]
+       [simple-input {:placeholder "Telefonszám"} @editor-atom :phone]
+       [date-input {:placeholder "Dátum"} @editor-atom :date]
+       [time-input {:placeholder "Időpont"}  @editor-atom :start]
+       [select-employee]]]
+     [:div.uk-width-1-1.uk-flex.uk-flex-center.uk-margin-small-top
+      [:div.uk-padding-small [:button.uk-button.res-cancel-button.rounded {:on-click #(dispatch [:add-to-db {:reservation-editor nil}])} "Mégsem"]]
+      [:div.uk-padding-small [:button.uk-button.res-save-button.rounded "Mentés"]]]]))
+
+
+
+
+
+
+(defn sidebar-content []
+  (let [shop-data (subscribe [:data :user-data])
+        selected-date (subscribe [:data :selected-date])
+        editor-data (subscribe [:data :reservation-editor])]
+    [:div#blocks
+     (if @editor-data
+       [:div
+        [reservation-editor editor-data]]
+       [:div.uk-animation-fade
+        [:div.uk-padding.uk-padding-remove-bottom.uk-padding-remove-top
+         [:img.uk-align-center.uk-margin-remove-bottom {:src "logo/szeged.png"}]]
+        [flatpickr
+         {:value @selected-date
+          :options {:inline true :onChange (fn [selected-dates date-str instance]
+                                             (dispatch [:select-date date-str]))}}]])]))
 
 (defn calendar-sidebar []
-  (let [shop-data (subscribe [:data :user-data])
-        selected-date (subscribe [:data :selected-date])]
-    (fn []
-      [:div#sidebar {:style {:background "#222" :width "340px"}}
-       ;(str @shop-data)
-       [:div#sidebar-inner {:style {:height "100vh" :position "fixed" :width "340px"}}
-                              ;:transform "translateX(-100%)"}}
-        [:div.uk-inline.uk-padding-small {:style {:height "100%"}} ;:overflow "hidden"}}
-         [open-handler]
-         [:div#blocks
-          [:div.uk-padding.uk-padding-remove-bottom.uk-padding-remove-top
-           [:img.uk-align-center.uk-margin-remove-bottom {:src "logo/szeged.png"}]]
-          [flatpickr {:value @selected-date :options {:inline true :onChange (fn [selected-dates date-str instance]
-                                                                               (dispatch [:select-date date-str]))}}]]]]])))
+  (let [open? (subscribe [:data :sidebar-open?])
+        last-open? (atom true)
+        close-func (fn [] (do
+                              (reset! last-open? false)
+                              (anim-to
+                                (get-el "sidebar")
+                                0.3
+                                (clj->js {:transform "translateX(-100%)"
+                                          :clearProps"transform"
+                                          :onComplete (fn [a]
+                                                        (set-gsap (get-el "sidebar") (clj->js {:width "0px"}))
+                                                        (set-gsap (get-el "sidebar-inner") (clj->js {:left "-340px"})))}))))
+        open-func (fn [] (do (reset! last-open? true)
+                             (do
+                               (set-gsap (get-el "sidebar-inner") (clj->js {:left "0px"}))
+                               (set-gsap
+                                 (get-el "sidebar")
+                                 (clj->js {:width "340px" :position "relative" :transform "translateX(-100%)"}))
+                               (anim-to
+                                 (get-el "sidebar")
+                                 0.3
+                                 (clj->js {:transform "translateX(0%)"})))))]
+                                           ;:clearProps"transform"})))))]
+
+    (reagent/create-class
+      {:component-did-update #(if (not= @last-open? @open?)
+
+                                (do
+                                  (.log js/console "nem egyforma" @last-open? " " @open?)
+                                  (if @open?
+                                    (open-func)
+                                    (close-func))))
+
+       :reagent-render
+       (fn []
+         [:div#sidebar {:style {:background "#222" :width "340px"}}
+          [:div#sidebar-inner {:style {:height "100vh" :position "fixed" :width "340px"}}
+                                 ;:transform "translateX(-100%)"}}
+           [:div.uk-inline.uk-padding-small {:style {:height "100%"}} ;:overflow "hidden"}}
+            [:div#trapezium.uk-text-center
+             {:on-click #(dispatch [:add-to-db {:sidebar-open? (not @open?)}])}
+             [:span {:data-uk-icon (str "ratio: 1.5; icon: " (if @open? "chevron-left" "chevron-right"))}]]
+            [sidebar-content]]]])})))
 
 
 (defn this-date []
-  (let [selected-date (subscribe [:data :selected-date])
-        selected-day (subscribe [:data :selected-day])
+  (let [selected-date-and-day (subscribe [:selected-date-and-day])
         reservations (subscribe [:data :reservations])
         day-name (fn [day-key]
                    (case day-key
@@ -801,12 +1018,13 @@
                        "11" "November"
                        "12" "December"
                        "unknown"))
-        date-in-str (fn [] (let [[year month day] (clojure.string/split @selected-date #"-")]
+        date-in-str (fn [] (let [[year month day] (clojure.string/split (first @selected-date-and-day)
+                                                                        #"-")]
                              (str (month-name month) " " day)))]
     [:div.uk-flex.uk-flex-center.gold-text.playfair.uk-text-center.uk-padding.uk-padding-bottom-remove.noselect.uk-width-auto
 
      [:div.uk-flex {:style {:align-items "center" :background "#222" :padding "5px" :border-radius "10px"}}
-      [:div.uk-margin-small-right {:on-click #(dispatch [:select-date (get-yesterday @selected-date)])
+      [:div.uk-margin-small-right {:on-click #(dispatch [:select-date (get-yesterday (first @selected-date-and-day))])
                                    :style {:cursor "pointer"}
                                    :data-uk-icon "ratio:1.5; icon: chevron-left"}]
       [:div [:div
@@ -814,21 +1032,20 @@
              (date-in-str)]
             [:div
              {:style {:font-size "1.5em"}}
-             (day-name @selected-day)]
+             (day-name (second @selected-date-and-day))]
             [:div
              {:style {:font-size "1.3em"}}
              (str (count @reservations) " vendég")]]
-      [:div.uk-margin-small-left {:on-click #(dispatch [:select-date (get-tomorrow @selected-date)])
+      [:div.uk-margin-small-left {:on-click #(dispatch [:select-date (get-tomorrow (first @selected-date-and-day))])
                                   :style {:cursor "pointer"}
                                   :data-uk-icon "ratio:1.5; icon: chevron-right"}]]]))
 
 (defn calendar-page []
   (let [websocket? (subscribe [:data :websocket?])
         reservations (subscribe [:data :reservations])]
-
     (fn []
        [:div
-        [:div.uk-width-1-1 {:style {:width "100%" :height "100vh" :background "url('/main.jpg')"}}
+        [:div.uk-width-1-1 {:style {:background "url('/main.jpg')"}}
          [:div.uk-flex
           [calendar-sidebar]
           [:div.uk-width-expand
@@ -836,25 +1053,29 @@
            (if @websocket?
              [calendar-loader])]]]])))
 
+
 (defn current-page []
-  (reagent/create-class
-    {:reagent-render (fn []
-                       (let [opening-hours (subscribe [:data :opening-hours])
-                             user (subscribe [:data :user])
-                             this-page (subscribe [:data :current-page])
-                             route-params (subscribe [:data :route-params])]
-                         (comment [:div
-                                   [:div.uk-position-left.uk-padding-small
-                                      [:h5
-                                       {:class (if @user "uk-text-success" "uk-text-danger")}
-                                       (if @user
-                                             (str "Logged in: " (str @user))
-                                             (str "Nobody logged in" @user))]
-                                      [:div.uk-text-small "Page: "@this-page]
-                                      [:div.uk-text-small "Params: " @route-params]]
-                                   [:div.uk-position-right.uk-padding-small
-                                    [:a {:href "/login"} [:button.uk-button.uk-button-primary "Login "]]
-                                    [:a.uk-margin-small-left {:href "/logout"} [:button.uk-button.uk-button-danger "Logout"]]]
-                                   [home-page]])
-                         [:div
-                          [calendar-page]]))}))
+  (let [];netflix-counter (subscribe [:data :netflix-counter])]
+    (reagent/create-class
+      {:reagent-render (fn []
+                         (let [opening-hours (subscribe [:data :opening-hours])
+                               user (subscribe [:data :user])
+                               this-page (subscribe [:data :current-page])
+                               route-params (subscribe [:data :route-params])]
+                           (comment [:div
+                                     [:div.uk-position-left.uk-padding-small
+                                        [:h5
+                                         {:class (if @user "uk-text-success" "uk-text-danger")}
+                                         (if @user
+                                               (str "Logged in: " (str @user))
+                                               (str "Nobody logged in" @user))]
+                                        [:div.uk-text-small "Page: "@this-page]
+                                        [:div.uk-text-small "Params: " @route-params]]
+                                     [:div.uk-position-right.uk-padding-small
+                                      [:a {:href "/login"} [:button.uk-button.uk-button-primary "Login "]]
+                                      [:a.uk-margin-small-left {:href "/logout"} [:button.uk-button.uk-button-danger "Logout"]]]
+                                     [home-page]])
+                           [:div
+                            ;[:div.uk-card.uk-card-default (str @netflix-counter)]
+                            ;[calendar-page]
+                            [proba-dnd]]))})))

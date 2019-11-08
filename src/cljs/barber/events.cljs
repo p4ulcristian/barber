@@ -195,7 +195,7 @@
 (reg-event-fx
   :get-reservations-and-breaks
   (fn [cofx [_ date]]
-      {:dispatch [:inc-loader]
+      {;:db (assoc (:db cofx) :reservations nil :breaks nil)
        :chsk {:event-key :calendar/get-reservations-and-breaks
               :data date
               :callback #(do
@@ -249,6 +249,15 @@
       (dispatch [:get-server-time])
       db))
 
+(reg-event-db
+  :netflix-counter-init
+  (fn [db [_ id]]
+    (assoc-in db [:netflix-counter id] 0)))
+
+(reg-event-db
+  :netflix-counter
+  (fn [db [_ id]]
+    (assoc-in db [:netflix-counter id] (inc (get-in  db [:netflix-counter id])))))
 
 (reg-event-db
   :dec-loader
@@ -258,7 +267,7 @@
         (.add (.-classList element) "animated-hide")
         (.setTimeout js/window
                      #(aset (.-style element) "display" "none")
-                     2000)))
+                     1500)))
     (assoc db :loader-count (dec (:loader-count db)))))
 
 (reg-event-db
@@ -270,16 +279,20 @@
   :select-date
   (fn [db [_ date]]
     (dispatch [:get-reservations-and-breaks date])
-    (assoc db :selected-date date
-              :selected-day (apply get-day-from-date
-                                   (clojure.string/split date #"-")))))
+    (assoc db
+      :reservations nil
+      :breaks nil
+      :selected-date date
+      :selected-day (apply get-day-from-date
+                          (clojure.string/split date #"-")))))
 
 
 
 (reg-event-fx
   :get-server-time
   (fn [_]
-      {:ajax {:method :get
+      {:dispatch [:inc-loader]
+       :ajax {:method :get
               :url "/server-time"
               :handler #(do
                           (dispatch [:select-date (first (read-string %))]))
@@ -331,7 +344,11 @@
 
   ;; the event handler (function) being registered
   (fn [{:keys [db local-store-todos]} _]                  ;; take 2 values from coeffects. Ignore event vector itself.
-    {:db (assoc default-db :todos local-store-todos :loader-count 0)}))   ;; all hail the new state to be put in app-db
+    {:db (assoc default-db
+           :todos local-store-todos
+           :loader-count 0
+           :netflix-counter {}
+           :sidebar-open? true)}))   ;; all hail the new state to be put in app-db
 
 
 ;; usage:  (dispatch [:set-showing  :active])

@@ -23,19 +23,9 @@
       db   (mg/get-db conn "barber")]
 
 
-     (defn add-to-mongo [req]
-       (str (mc/insert db "documents" { :_id (ObjectId.) :first_name "John" :last_name "Lennon"})))
-
      (defn get-user [username]
        (let [user (mc/find-one-as-map db "users" { :username username})]
          user))
-
-     (defn add-user [user-map]
-       (let [some? (mc/find-one-as-map db "users" {:name (:name user-map)})]
-         (if some?
-           "Already existing"
-           (do (mc/insert db "users" (assoc user-map :role :admin))
-               "Successfully added"))))
 
      (defn shop-data [req]
            (let [host  (get (:headers req) "host")
@@ -50,11 +40,26 @@
 
      (defn get-reservations-and-breaks-from-calendar [day request]
            (let [shop-id (get-shop-id request)
-                 all-days (mc/find-maps db (str shop-id "_calendar") {:date day})
-                 only-reservations  (mapv #(assoc (second %) :reservation-id (first %))
-                                          (reduce merge (map :reservations all-days)))]
-                {:breaks {1 true}
-                 :reservations only-reservations}))
+                 all-from-day (mc/find-maps db (str shop-id "_calendar") {:date day})
+                 only-breaks (reduce merge (map (fn [item] (assoc {} (:employee item) (if (and (:breaks item)
+                                                                                               (not= 0 (count (:breaks item))))
+                                                                                        (:breaks item)
+                                                                                        false)))
+                                                all-from-day))
+
+                 assoc-with-key (fn [coll the-key the-val]
+                                  (mapv #(assoc (second %) :reservation-id (first %)
+                                                the-key the-val)
+                                        coll))
+
+                 reservations-with-employee  (map #(assoc-with-key (:reservations %) :employee (:employee %))
+                                                  all-from-day)
+
+                 reservations-with-id  (reduce concat reservations-with-employee)]
+
+
+                {:breaks only-breaks
+                 :reservations reservations-with-id}))
 
      (defn get-employees [request]
            (let [shop-id (get-shop-id request)
@@ -99,36 +104,87 @@
      ;Update the starts in the reservations to numbers.
 
 
-     (comment
-       (defn update-start-to-minutes [coll]
-         (let [all (mc/find-maps db coll {})
-               filtered-all (filter #(not= 0 (count (:reservations %))) all)
-               res-with-id (map #(vector (:_id %) (:reservations %)) filtered-all)
-               process-reservations (fn [reservations]
-                                        (reduce merge (map #(assoc {} (first %) (assoc (second %) :start (convert-time-to-minutes (:start (second %)))))
-                                                           reservations)))
-               updated-reservations-vec (mapv #(vector (first %) (process-reservations (second %)))
-                                              res-with-id)];(get-in % [(first %) :start]))))]
+     (defn update-start-to-minutes [coll]
+       "startot updateljuk percesse minden foglalasban"
+       (let [all (mc/find-maps db coll {})
+             filtered-all (filter #(not= 0 (count (:reservations %))) all)
+             res-with-id (map #(vector (:_id %) (:reservations %)) filtered-all)
+             process-reservations (fn [reservations]
+                                      (reduce merge (map #(assoc {} (first %) (assoc (second %) :start (convert-time-to-minutes (:start (second %)))))
+                                                         reservations)))
+             updated-reservations-vec (mapv #(vector (first %) (process-reservations (second %)))
+                                            res-with-id)];(get-in % [(first %) :start]))))]
 
 
-              (doseq [[id reservations] updated-reservations-vec]
-                     (mc/update-by-id db coll id {"$set" {"reservations" reservations}})))))
+            (doseq [[id reservations] updated-reservations-vec]
+                   (mc/update-by-id db coll id {"$set" {"reservations" reservations}}))))
+
+
+     (defn convert-breaks [coll]
+       (mapv #(let [start-in-minutes (convert-time-to-minutes (:start %))]
+                (vector start-in-minutes (+ start-in-minutes (:length %))))
+         coll))
+
+     (defn update-breaks-to-minutes [coll]
+       "startot updateljuk percesse minden foglalasban"
+       (let [all (mc/find-maps db coll {})]
+         (doseq [one-reservation all]
+                (mc/update-by-id db coll (:_id one-reservation)
+                                 {"$set" {"breaks" (convert-breaks
+                                                     (:breaks one-reservation))}}))))
 
 
      ;Updating the opening-hours to numbers
 
-     (comment
-       (defn convert-opening [opening]
-             (reduce merge
-                     (map #(assoc {} (first %)  (mapv convert-time-to-minutes (second %)))
-                           opening)))
+     (defn convert-opening [opening]
+           (reduce merge
+                   (map #(assoc {} (first %)  (mapv convert-time-to-minutes (second %)))
+                         opening)))
 
 
-       (defn update-opening-hours []
-         (let [shops (mc/find-maps db "shops" {})
-               id-and-opening (map #(vector (:_id %) (:opening-hours %))
-                                   shops)]
-              (for [[id opening] id-and-opening]
-                (mc/update-by-id db "shops" id {"$set" {:opening-hours (convert-opening opening)}}))))))
+     (defn update-opening-hours []
+       "opening hours updatelese percekke"
+       (let [shops (mc/find-maps db "shops" {})
+             id-and-opening (map #(vector (:_id %) (:opening-hours %))
+                                 shops)]
+            (doseq [[id opening] id-and-opening]
+              (mc/update-by-id db "shops" id {"$set" {:opening-hours (convert-opening opening)}}))))
+
+     (defn update-barber-to-employee [coll]
+       "_calendarban barber updatelese employeeva"
+       (let [reservations (mc/find-maps db coll {})]
+         (doseq [one-reservation reservations]
+           (mc/update-by-id db coll (:_id one-reservation)
+                            {"$set" {:employee (:barber one-reservation)}
+                             "$unset" {:barber nil}}))))
+
+
+     (defn update-brakes-to-breaks [coll]
+       "_calendarban barber updatelese employeeva"
+       (let [reservations (mc/find-maps db coll {})]
+         (doseq [one-reservation reservations]
+           (mc/update-by-id db coll (:_id one-reservation)
+                            {"$set" {:breaks (:brakes one-reservation)}
+                             "$unset" {:brakes nil}}))))
+
+     (defn update-users []
+       "_calendarban barber updatelese employeeva"
+       (let [users (mc/find-maps db "users" {})]
+         (doseq [one-user users]
+           (mc/update-by-id db "users" (:_id one-user)
+                            {"$set" {:username (:name one-user)
+                                     :shop-id (:city one-user)}
+                             "$unset" {:city nil
+                                       :name nil}}))))
+
+     (defn db-update-all [coll]
+       (update-users)
+       (update-barber-to-employee coll)
+       (update-brakes-to-breaks coll)
+       (update-breaks-to-minutes coll)
+       (update-opening-hours)
+       (update-start-to-minutes coll)))
+
+
 
 

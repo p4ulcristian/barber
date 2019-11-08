@@ -343,11 +343,8 @@
                   :post post-login}]
        ["/shop-data" {:get (fn [req] (text-wrap (db/shop-data req)))}]
        ["/add-user" {:post (fn [req]
-                             (let [params (:params req)]
-                              (text-wrap (db/add-user (assoc params :password (hashers/encrypt (:password params)))))))}]
-       ["/add-to-mongo" {:post (fn [req]
-                                 (text-wrap (db/add-to-mongo req)))}]
-
+                             (let [params (:params req)]))}]
+                              ;(text-wrap (db/add-user (assoc params :password (hashers/encrypt (:password params)))))))}]
        ["/logout" {:get post-logout}]
        ["/user" {:get (fn [req] (request-wrap 200 "text/plain" (:identity (:session req))))}]
        ["/users" {:get (fn [req] (request-wrap 200 "text/plain" (str @connected-users)))}]

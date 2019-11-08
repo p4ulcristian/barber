@@ -18,6 +18,16 @@
   (fn [db [_ the-key]]
     (get db the-key)))
 
+(reg-sub :selected-date-and-day
+         (fn [db []]
+           (vector (get db :selected-date)
+                   (get db :selected-day))))
+
+
+
+
+
+
 (reg-sub
   :calendar-data-loaded?
   (fn [db [_ the-key]]

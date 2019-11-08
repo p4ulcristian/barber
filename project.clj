@@ -28,11 +28,12 @@
                  [ring-transit "0.1.6"]
                  [clj-time "0.15.2"]
                  [com.andrewmcveigh/cljs-time "0.5.2"]
-
                  [thheller/shadow-cljs "2.8.64"]
                  [org.clojure/clojurescript "1.10.520"]
                  [com.google.javascript/closure-compiler-unshaded "v20190325"]
                  [org.clojure/google-closure-library "0.0-20190213-2033d5d9"]]
+
+
 
 
   :plugins [[lein-shadow "0.1.6"]]
@@ -65,6 +66,5 @@
   :profiles {:uberjar {:source-paths ["src/barber/clj"]
                        :prep-tasks ["clean"
                                     "compile" ["shadow" "release" "app"]]
-
                        :aot :all
                        :omit-source true}})
