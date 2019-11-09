@@ -51,9 +51,9 @@
        [:div (merge {:ref   (.-innerRef provided)
                      :class (when (.-isDraggingOver snapshot) :drag-over)}
                     (js->clj (.-droppableProps provided)))
-        [:h2 "Barberek"]
-        (.-placeholder provided)
-        component]))])
+
+        component
+        (.-placeholder provided)]))])
 
 
 
@@ -65,11 +65,11 @@
       :index idx}
      (fn [provided snapshot]
        (reagent/as-element [:div
-                            (merge {;:style {:background "white"}
+                            (merge {
                                     :ref (.-innerRef provided)}
                                    (js->clj (.-draggableProps provided))
                                    (js->clj (.-dragHandleProps provided)))
-                            (str (:name data) " - " (number? idx))]))]))
+                            (str (:name data) " - " idx)]))]))
 
 (comment (defn drag-drop-context [component id]
            [:> Droppable {:droppable-id id :type "thing"}
@@ -78,13 +78,12 @@
 
 (defn proba-dnd []
   (let [employees (subscribe [:data :employees])]
-    [:div.uk-padding {:style {:height "900px"}}
-     [drag-drop-context
-      [droppable-employees ;{:droppable-id "droppable-1" :type "thing"}
-       (map-indexed
-         #(-> ^{:key (:priority %2)}
-              [draggable-employee %2])
-         @employees)]]]))
+    [drag-drop-context
+     [droppable-employees ;{:droppable-id "droppable-1" :type "thing"}
+      (map-indexed
+        #(-> ^{:key (:priority %2)}
+             [draggable-employee %2])
+        (sort-by :priority @employees))]]))
 
 
 
@@ -925,24 +924,51 @@
 
 
 
+(defn menu-item [data]
+  [:button.uk-button.menu-item {:on-click #(dispatch [:add-to-db {:actual-page (:page data)}])}
+   (:name data)])
 
-
+(defn menu []
+  [:div.uk-animation-fade {:style {:margin-top "40px"}}
+   [menu-item {:name "Naptár" :page :calendar}]
+   [menu-item {:name "Szünetek" :page :brakes}]
+   [menu-item {:name "Kliensek" :page :clients}]
+   [menu-item {:name "Barberek" :page :employees}]
+   [menu-item {:name "Szolgáltatások" :page :services}]
+   [menu-item {:name "Statisztikák" :page :statistics}]])
 
 (defn sidebar-content []
   (let [shop-data (subscribe [:data :user-data])
         selected-date (subscribe [:data :selected-date])
-        editor-data (subscribe [:data :reservation-editor])]
-    [:div#blocks
-     (if @editor-data
-       [:div
-        [reservation-editor editor-data]]
-       [:div.uk-animation-fade
-        [:div.uk-padding.uk-padding-remove-bottom.uk-padding-remove-top
-         [:img.uk-align-center.uk-margin-remove-bottom {:src "logo/szeged.png"}]]
-        [flatpickr
-         {:value @selected-date
-          :options {:inline true :onChange (fn [selected-dates date-str instance]
-                                             (dispatch [:select-date date-str]))}}]])]))
+        editor-data (subscribe [:data :reservation-editor])
+        menu? (atom true)]
+    (fn []
+      [:div#blocks
+       [:div {:on-click #(reset! menu? (not @menu?))
+              :style {:z-index 1000
+                      :cursor "pointer"
+                      :padding "10px"
+                      :position "absolute"
+                      :left 0
+                      :top 0}}
+        [:span
+         {:style {
+                  :color "white"
+                  :padding "5px"
+                  :border "1px solid white" :border-radius "5px"}
+          :data-uk-icon "menu"}]]
+       (if @editor-data
+         [:div
+          [reservation-editor editor-data]]
+         (if @menu?
+           [menu]
+           [:div.uk-animation-fade
+            [:div.uk-padding.uk-padding-remove-bottom.uk-padding-remove-top
+             [:img.uk-align-center.uk-margin-remove-bottom {:src "logo/szeged.png"}]]
+            [flatpickr
+             {:value @selected-date
+              :options {:inline true :onChange (fn [selected-dates date-str instance]
+                                                 (dispatch [:select-date date-str]))}}]]))])))
 
 (defn calendar-sidebar []
   (let [open? (subscribe [:data :sidebar-open?])
@@ -1044,18 +1070,14 @@
   (let [websocket? (subscribe [:data :websocket?])
         reservations (subscribe [:data :reservations])]
     (fn []
-       [:div
-        [:div.uk-width-1-1 {:style {:background "url('/main.jpg')"}}
-         [:div.uk-flex
-          [calendar-sidebar]
-          [:div.uk-width-expand
-           [this-date]
-           (if @websocket?
-             [calendar-loader])]]]])))
+       [:div.uk-width-expand
+        [this-date]
+        (if @websocket?
+          [calendar-loader])])))
 
 
 (defn current-page []
-  (let [];netflix-counter (subscribe [:data :netflix-counter])]
+  (let [actual-page (subscribe [:data :actual-page])];netflix-counter (subscribe [:data :netflix-counter])]
     (reagent/create-class
       {:reagent-render (fn []
                          (let [opening-hours (subscribe [:data :opening-hours])
@@ -1077,5 +1099,12 @@
                                      [home-page]])
                            [:div
                             ;[:div.uk-card.uk-card-default (str @netflix-counter)]
-                            ;[calendar-page]
-                            [proba-dnd]]))})))
+                            ;[proba-dnd]
+                            [:div
+                             [:div.uk-width-1-1 {:style {:background "url('/main.jpg')"}}
+                              [:div.uk-flex {:style {:min-height "100vh"}}
+                               [calendar-sidebar]
+                               (case @actual-page
+                                 :calendar [calendar-page]
+                                 :employees [:div]
+                                 "This page doesn't exists.")]]]]))})))

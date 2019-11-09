@@ -348,7 +348,8 @@
            :todos local-store-todos
            :loader-count 0
            :netflix-counter {}
-           :sidebar-open? true)}))   ;; all hail the new state to be put in app-db
+           :sidebar-open? true
+           :actual-page :calendar)}))   ;; all hail the new state to be put in app-db
 
 
 ;; usage:  (dispatch [:set-showing  :active])

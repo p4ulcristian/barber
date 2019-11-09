@@ -88,7 +88,7 @@ width: 240px;
 }
 
 .one-cell:hover {
-background: rgb(255, 226, 38);
+background: rgb(255, 226, 38, 0.5);
 }
 
 .edit-button{
@@ -103,3 +103,27 @@ opacity: 1;
 
 }
 
+
+.drag-over{
+background: lightgrey;
+}
+
+.menu-item{
+ text-transform: capitalize;
+ font-family: 'Playfair Display SC', serif;
+ width: 100%;
+ font-size: 1.3em;
+ background: #222;
+ border: 0px;
+ color: white;
+ margin-top: 10px;
+ padding-bottom: 2px;
+ border-bottom: 1px solid lightgrey;
+ transition: 0.2s border-bottom ease-in;
+ }
+
+ .menu-item:hover{
+color: rgb(255, 226, 38);
+ border-bottom: 1px solid rgb(255, 226, 38);
+ transition: 0.2s border-bottom ease-out;
+ }
