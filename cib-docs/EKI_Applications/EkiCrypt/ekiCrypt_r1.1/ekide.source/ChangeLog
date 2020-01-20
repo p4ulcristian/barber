@@ -1,0 +1,17 @@
+1999-12-14  Kónya Boldizsár  <konyab@ieb.hu>
+
+	* Verzió: 1.5
+
+	* sakide saját (nem gnu) getline is olvassa a csak \n -bõl álló sorokat
+
+	* stdout-on a kimenet encrypt/decrypt-nél már nincs \n-el lezárva
+
+	* Bugfix: x>3 \n utáni rendes olvasás stdin-rõl
+
+	* sakiCrypt verzió lekérdezése a -h (usage) és -V (version) opcióknál
+
+1999-11-25  Kónya Boldizsár  <konyab@ieb.hu>
+
+	* Verzió: 1.4
+
+	* Új opciók: -j, -i, -m a kulcsinformációk lekérdezéséhez.

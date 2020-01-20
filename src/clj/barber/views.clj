@@ -6,7 +6,10 @@
     [config.core :refer [env]]))
 
 
-
+(defn four-o-four []
+  [:div [:div.uk-inline {:style "background: #222;
+                  height: 100vh;
+                  width: 100vw;"} [:div.uk-position-center [:img.uk-align-center {:height "50px" :src "/img/logo.png" :style "z-index: 8000"}] [:div.uk-text-center [:div.four-o-four-number "404"] [:div.four-o-four "This page cannot be found."] [:div.four-o-four "Ez az oldal nem található."]]]]])
 
 (def mount-target
   "Loading screen for mounting"
@@ -96,6 +99,31 @@
    (include-css "https://fonts.googleapis.com/css?family=Playfair+Display+SC&display=swap")
    (include-css "/css/site.css")])
 
+(defn client-head [req]
+  "Head with some metatags"
+  (let [shop-id (:shop-id req)]
+    [:head
+     [:title "Barbershop foglalás"]
+     [:link {:rel "icon" :href "/favicon.png" :type "image/png"}]
+     [:meta {:charset "utf-8"}]
+     [:meta {:name "viewport"
+             :content "width=device-width, initial-scale=1"}]
+     [:meta {:name "theme-color"
+             :content "#FFDC5A"}]
+     [:meta {:content "https://szeged.barbershopbp.hu" :property "og:url"}]
+     [:meta {:content "website" :property "og:type"}]
+     [:meta {:content "BarberShop foglalás" :property "og:title"}]
+     [:meta {:content "Barbershop időpontfoglalórendszer" :property "og:description"}]
+     [:meta {:content (str "https://szeged.barbershopbp.hu/logo/" shop-id "fb?v=3")
+             :property "og:image"}]
+     loader-style
+     (include-css "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/css/uikit.min.css")
+     (include-css "/css/flatpickr.min.css")
+     (include-css "https://fonts.googleapis.com/css?family=Playfair+Display+SC&display=swap")
+     (include-css "/css/client.css?v=5")
+     (include-js "https://maps.googleapis.com/maps/api/js?key=AIzaSyAfwbhHb9Dq81Hh4K1I-_7xcho7B7IyCC0")]))
+
+
 (defn loading-page []
   "The app's page"
   (html5
@@ -104,12 +132,76 @@
     (let [csrf-token (force anti-forgery/*anti-forgery-token*)]
         [:div#sente-csrf-token {:data-csrf-token csrf-token}])
     mount-target
-    (include-js "/js/uikit.min.js")
-    (include-js "/js/uikit-icons.min.js")
+    (include-js "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/js/uikit.min.js")
+    (include-js "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/js/uikit-icons.min.js")
     (include-js "https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js")
     (include-js "https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js")
-    (include-js "/js/main.js")]))
+    (include-js "/js/main.js?v=42")]))
 
+
+(defn client-page [req]
+  "The client's page"
+  (html5
+    (client-head req)
+    [:body {:class "body-container"}
+     (let [csrf-token (force anti-forgery/*anti-forgery-token*)]
+        [:div#sente-csrf-token {:data-csrf-token csrf-token}])
+     mount-target
+     (include-js "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/js/uikit.min.js")
+     (include-js "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/js/uikit-icons.min.js")
+     (include-js "/js/client.js?v=42")]))
+
+(defn unsuccessful-cancel [req]
+  (html5
+    (client-head req)
+    [:body.playfair
+     [:div.uk-inline {:style "background: #222;
+                  height: 100vh;
+                  width: 100vw;"}
+      [:div.uk-position-center
+       [:img.uk-align-center {:height "50px" :src "/img/logo.png" :style "z-index: 8000"}]
+       [:div.uk-text-center
+        [:div.four-o-four "Ez a foglalás már törlésre került rendszerünk által."]
+        [:div.four-o-four "This appointment has already been deleted by our system."]]]]]))
+
+(defn successful-confirm [req]
+  (html5
+    (client-head req)
+    [:body.playfair
+     [:div.uk-inline {:style "background: #222;
+                  height: 100vh;
+                  width: 100vw;"}
+      [:div.uk-position-center
+       [:img.uk-align-center {:height "50px" :src "/img/logo.png" :style "z-index: 8000"}]
+       [:div.uk-text-center
+        [:div.four-o-four "Sikeres megerősítés."]
+        [:div.four-o-four "Successful reservation."]]]]]))
+
+(defn unsuccessful-confirm [req]
+  (html5
+    (client-head req)
+    [:body.playfair
+     [:div.uk-inline {:style "background: #222;
+                  height: 100vh;
+                  width: 100vw;"}
+      [:div.uk-position-center
+       [:img.uk-align-center {:height "50px" :src "/img/logo.png" :style "z-index: 8000"}]
+       [:div.uk-text-center
+        [:div.four-o-four "Sikertelen megerősítés, ez a foglalás már nem létezik."]
+        [:div.four-o-four "Unsuccessful reservation, this reservation doesnát exists."]]]]]))
+
+(defn successful-cancel [req]
+  (html5
+    (client-head req)
+    [:body.playfair
+     [:div.uk-inline {:style "background: #222;
+                  height: 100vh;
+                  width: 100vw;"}
+      [:div.uk-position-center
+       [:img.uk-align-center {:height "50px" :src "/img/logo.png" :style "z-index: 8000"}]
+       [:div.uk-text-center
+        [:div.four-o-four "Sikeres lemondás."]
+        [:div.four-o-four "Successful cancelling."]]]]]))
 
 (defn login-page
   "The Login page"

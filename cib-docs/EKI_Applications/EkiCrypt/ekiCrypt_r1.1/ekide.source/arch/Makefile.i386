@@ -1,0 +1,22 @@
+#  $Date$
+#  $Id$
+#	 $Name$
+#	 $Log$
+#	 $State$
+
+LIBC=LIBC6
+#LIBC=LIBC5
+
+
+ifeq ($(LIBC),LIBC6)
+CC=gcc
+else
+CC = i486-linuxlibc1-gcc	
+endif
+
+#CC=checkergcc
+
+CFLAGS=-I$(srcdir) -D$(LIBC) -D_GNU_SOURCE -s
+
+LD=$(CC)
+LDFLAGS=-Wl,-L$(srcdir),-s

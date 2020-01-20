@@ -3,6 +3,8 @@
     [reitit.ring :as reitit-ring]
     ;[barber.middleware :refer [middleware]]
     [barber.views :as views]
+    [barber.email :as email]
+    [barber.schedule :as schedule]
     [barber.db :as db]
     [taoensso.sente :as sente]
     [clojure.core.async :as async :refer (<! <!! >! >!! put! chan go go-loop)]
@@ -28,7 +30,9 @@
     [taoensso.sente.packers.transit :as sente-transit]
     [ring.middleware.transit :refer [wrap-transit-params]]
     [clojure.java.io :as io])
-  (:gen-class))
+  (:gen-class)
+  (:import [com.mongodb MongoOptions ServerAddress]
+           org.bson.types.ObjectId))
 
 (System/setOut (java.io.PrintStream. (org.apache.commons.io.output.WriterOutputStream. *out*) true))
 
@@ -61,6 +65,7 @@
             :session (assoc session
                        :identity user-name
                        :role user-role
+                       :uid shop-id
                        ;:name username
                        :shop-id shop-id))
 
@@ -68,7 +73,7 @@
 
 (defn post-logout [{session :session}]
   "Logging out username"
-  (assoc (redirect "/")
+  (assoc (redirect "/login")
          :session (dissoc session :identity)))
 
 
@@ -84,12 +89,15 @@
 
 (defn png-wrap [photo-name]
   "Wrap png"
-  (request-wrap 200 "image/png" (io/file (str "logos/" photo-name))))
+  (request-wrap 200 "image/jpeg" (io/file (str "logos/" photo-name))))
 
 (defn text-wrap [content]
   "Wrap Plain Text"
   (request-wrap 200 "text/plain" content))
 
+(defn pdf-wrap [content]
+  "Wrap PDF"
+  (request-wrap 200 "application/pdf" content))
 
 (defn random-post [_request]
   "Random post"
@@ -97,7 +105,11 @@
 
 (defn server-time-handler
   [_request]
-  (text-wrap (str (clojure.string/split (str (t/now)) #"T"))))
+  (let [with-offset (fn [date] (t/to-time-zone date (t/time-zone-for-id "Europe/Budapest")))
+        today (with-offset (t/now))]
+    (text-wrap (str (clojure.string/split
+                      (str today)
+                      #"T")))))
 
 
 (reset! sente/debug-mode?_ true)
@@ -158,9 +170,8 @@
               (debugf "Broadcasting server>user: %s uids" (count uids))
               (doseq [uid uids]
                 (chsk-send! uid
-                  [:some/broadcast
-                   {:what-is-this "An async broadcast pushed from server"
-                    :how-often "Every 10 seconds"
+                  [:calendar/update
+                   {:date "2020-04-20"
                     :to-whom uid
                     :i i}]))))]
 
@@ -168,6 +179,11 @@
         (<! (async/timeout 10000))
         (when @broadcast-enabled?_ (broadcast! i))
         (recur (inc i)))))
+
+  (defn calendar-update [req date]
+    (let [shop-id (:shop-id req)]
+      (chsk-send! shop-id [:calendar/update
+                           {:date date}])))
 
   ;;;; Sente event handlers
 
@@ -206,21 +222,77 @@
 
   ;Calendar events
 
-  (defmethod -sente-messages :calendar/get-reservations-and-breaks
+  (defmethod -sente-messages :calendar/get-reservations-and-brakes
                 [{:as ev-msg :keys [?reply-fn ?data ring-req]}]
-                (?reply-fn (db/get-reservations-and-breaks-from-calendar ?data ring-req)))
+                (?reply-fn (db/get-reservations-and-brakes-from-calendar ?data ring-req)))
 
-  (defmethod -sente-messages :calendar/add-event
-             [{:as ev-msg :keys [?reply-fn]}]
-             (?reply-fn (str :calendar/add-event)))
-
-  (defmethod -sente-messages :calendar/modify-event
-             [{:as ev-msg :keys [?reply-fn]}]
-             (?reply-fn (str :calendar/modify-event)))
+  (defmethod -sente-messages :calendar/add-modify-event
+             [{:as ev-msg :keys [?reply-fn ?data ring-req]}]
+    (calendar-update ring-req (:date ?data))
+    (?reply-fn (db/send-res-agent
+                 (fn []
+                   (do
+                     (db/add-log (:shop-id ring-req)
+                                 (assoc ?data :type "add-modify-by-employee"))
+                     (db/calendar-add-modify-event-employee ?data ring-req))))))
 
   (defmethod -sente-messages :calendar/remove-event
-             [{:as ev-msg :keys [?reply-fn]}]
-             (?reply-fn (str :calendar/remove-event)))
+             [{:as ev-msg :keys [?reply-fn ?data ring-req]}]
+    (calendar-update ring-req (:date ?data))
+    (?reply-fn
+      (do
+        (db/add-log (:shop-id ring-req) (assoc ?data :type "remove-by-employee"))
+        (db/calendar-remove-event
+          (:shop-id ring-req)
+          (:reservation-id ?data)))))
+
+
+  ;Brakes events
+
+  (defmethod -sente-messages :brakes/get-brake-types
+   [{:as ev-msg :keys [?reply-fn ring-req]}]
+   (?reply-fn (db/get-brake-types ring-req)))
+
+  (defmethod -sente-messages :brakes/remove-brake-type
+    [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+    (?reply-fn (db/remove-brake-type ring-req ?data)))
+
+  (defmethod -sente-messages :brakes/add-brake-type
+    [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+    (?reply-fn (db/add-brake-type ring-req ?data)))
+
+  (defmethod -sente-messages :brakes/add-brakes-to-dates
+    [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+    (?reply-fn (db/add-brakes-to-dates ring-req ?data)))
+
+  (defmethod -sente-messages :brakes/get-brakes-on-dates
+    [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+    (?reply-fn (db/get-brakes-on-dates ring-req ?data)))
+
+  ;Client events
+
+  (defmethod -sente-messages :clients/get-some
+    [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+    (?reply-fn (db/get-some-clients
+                 (:shop-id ring-req)
+                 (:skip ?data))))
+
+  (defmethod -sente-messages :clients/get-count
+    [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+    (?reply-fn (db/get-clients-count
+                 (:shop-id ring-req))))
+
+
+
+  (defmethod -sente-messages :employee-service/add
+    [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+    (?reply-fn (db/add-employee-service ring-req (:the-key ?data))))
+
+  (defmethod -sente-messages :employee-service/add
+    [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+    (?reply-fn (db/remove-employee-service ring-req
+                                        (:the-key ?data)
+                                        (:_id ?data))))
 
   ;Employee events
 
@@ -244,6 +316,18 @@
              [{:as ev-msg :keys [?reply-fn]}]
              (?reply-fn (str :employees/add-break)))
 
+  (defmethod -sente-messages :employees/modify-positions
+             [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+             (?reply-fn (db/modify-positions
+                         (:shop-id (:session ring-req))
+                         ?data)))
+
+  (defmethod -sente-messages :employees/modify-item
+             [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+             (?reply-fn (db/modify-item
+                         (:shop-id (:session ring-req))
+                         ?data)))
+
   ;Service-events
   (defmethod -sente-messages :services/get-all
              [{:as ev-msg :keys [?reply-fn ring-req]}]
@@ -260,6 +344,18 @@
   (defmethod -sente-messages :services/remove
              [{:as ev-msg :keys [?reply-fn]}]
              (?reply-fn (str :services/remove)))
+
+  (defmethod -sente-messages :services/modify-positions
+             [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+             (?reply-fn (db/modify-positions
+                         (:shop-id (:session ring-req))
+                         ?data)))
+
+  (defmethod -sente-messages :services/modify-item
+             [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
+             (?reply-fn (db/modify-item
+                         (:shop-id (:session ring-req))
+                         ?data)))
 
   ;User events
 
@@ -327,26 +423,156 @@
   "Missing anti-forgery response"
   (request-wrap 403 "text/html" "<h1>Missing anti-forgery token</h1>"))
 
+(defn get-shop-id [request]
+  (let [host (get (:headers request) "host")
+        id (first (clojure.string/split host #"\."))]
+    (str id)))
+
+
+(defn wrap-shop-id [handler]
+  (fn [request]
+    (let [shop-id (-> request get-shop-id)
+          db-shop (let [item (db/shop-data request)]
+                    (if (= "" item)
+                      nil
+                      item))]
+
+      (if db-shop
+        (handler (assoc request :shop-id shop-id))
+        (handler (assoc request :shop-id (:shop-id (:session request))))))))
+
+(def email-config
+  {:employee "5c589602264661cd54af882e"
+   :service "5c589d29264661cd54af884a"
+   :date "2012-02-12"
+   :start 900
+   :language :hu
+   :shop "szeged"
+   :user {:name "Paul"}})
+
 (def app
   (do
     (start-router!)
     (reitit-ring/ring-handler
      (reitit-ring/router
-      [["/logo/:name" {:get {:handler (fn [req] (png-wrap (:name (:path-params req))))}}]
+      [["/" {:get {:handler (fn [req] (html-wrap (views/client-page req)))}}]
+       ["/email" {:get {:handler (fn [req] (html-wrap
+                                             (email/pls-confirm-email (db/shop-data req)
+                                                                      email-config)))}}]
+       ["/email1" {:get {:handler (fn [req] (html-wrap
+                                              (email/successful-confirmation-email (db/shop-data req)
+                                                                                   email-config)))}}]
+       ["/email2" {:get {:handler (fn [req] (html-wrap
+                                              (email/successful-cancellation-email
+                                                (db/shop-data req)
+                                                email-config)))}}]
+       ["/reserve" {:post {:handler (fn [req] (text-wrap
+                                                (let [shop-data (db/shop-data req)
+                                                      oid (ObjectId.)
+                                                      res-params (assoc (:params req) :reservation-id (str oid))]
+                                                  (db/send-res-agent
+                                                    (fn []
+                                                      (do
+                                                        (calendar-update req (:date res-params))
+                                                        (schedule/do-in-30-minutes
+                                                          (str oid)
+                                                          #(do
+                                                             (db/calendar-remove-event (:_id (read-string  shop-data))
+                                                                                       (:remove %))
+                                                             (db/add-log (:shop-id (:req %)) (:res-params (:res-params %)))
+                                                             (apply email/send-email (:email %))
+                                                             (calendar-update (:req %)
+                                                                              (:date %)))
+                                                          {:remove (str oid)
+                                                           :req req
+                                                           :res-params (assoc res-params :type "automatic-cancel")
+                                                           :date (:date res-params)
+                                                           :email [:auto-cancel
+                                                                   (db/shop-data req)
+                                                                   (assoc res-params :email (:email (:user res-params)))]})
+
+
+                                                        (if (= "success" (db/calendar-add-event (:shop-id req) (assoc
+                                                                                                                 (dissoc res-params :user)
+                                                                                                                 :confirmed? false
+                                                                                                                 :name (:name (:user res-params))
+                                                                                                                 :email (:email (:user res-params))
+                                                                                                                 :phone (:phone (:user res-params)))))
+                                                          (do
+                                                            (db/add-client
+                                                              (:shop-id req)
+                                                              (:user res-params))
+                                                            (email/send-email
+                                                              :pls-confirm
+                                                              shop-data
+                                                              (assoc res-params :email (:email (:user res-params))))
+                                                            (db/add-log (:shop-id req) (assoc res-params :type "reserve-by-guest"))
+                                                            "success")
+                                                          "reserved")))))))}}]
+
+       ["/req" {:get {:handler (fn [req] (text-wrap (str req)))}}]
+       ["/confirm/:res-id" {:get {:handler (fn [req] (html-wrap
+                                                       (let [this-reservation (db/get-reservation-for-email (:shop-id req) (:res-id (:path-params req)))]
+                                                         (if
+                                                           (= true (:confirmed? this-reservation))
+                                                           (views/successful-confirm req)
+                                                           (if (= 1 (db/calendar-confirm-event
+                                                                      (:shop-id req) (:res-id (:path-params req))))
+                                                             ;true
+                                                             (do
+                                                               (db/confirm-client (:shop-id req) (:email this-reservation))
+                                                               (email/send-email
+                                                                 :confirm
+                                                                 (db/shop-data req)
+                                                                 (merge {:reservation-id (:res-id (:path-params req))
+                                                                         :language :hu}
+                                                                        this-reservation))
+                                                               (db/add-log (:shop-id req) (assoc this-reservation :type "confirm-by-guest"))
+                                                               (calendar-update req (:date this-reservation))
+                                                               (views/successful-confirm req))
+                                                             (views/unsuccessful-confirm req))))))}}]
+       ["/cancel/:res-id" {:get {:handler (fn [req] (html-wrap
+                                                      (let [this-res (db/get-reservation-for-email (:shop-id req) (:res-id (:path-params req)))]
+                                                        (if (= 1 (db/calendar-remove-event (:shop-id req) (:res-id (:path-params req))))
+                                                          (do
+                                                            (email/send-email
+                                                              :cancel
+                                                              (db/shop-data req)
+                                                              this-res)
+                                                            (schedule/delete-task-from-schedule (:res-id (:path-params req)))
+                                                            (db/add-log (:shop-id req) (assoc this-res :type "cancel-by-guest"))
+                                                            (calendar-update req (:date this-res))
+                                                            (views/successful-cancel req))
+                                                          (views/unsuccessful-cancel req)))))}}]
+
+       ["/files/:name" {:get {:handler (fn [req] (pdf-wrap (io/resource "/files/szeged-altalanos.pdf")))}}]
+       ["/logo/:name" {:get {:handler (fn [req] (png-wrap (str (:name (:path-params req)) ".png")))}}]
        ["/calendar" {:get {:handler (fn [req]
                                         (if (authenticated? (:session req))
                                           (html-wrap (views/loading-page))
                                           (redirect "/login")))}}]
-       ["/server-time" {:get {:handler server-time-handler}}]
+       ["/server-time" {:get {:handler (fn [req] (server-time-handler req))}}]
+
+       ["/get-employees-and-services" {:get {:handler (fn [req] (text-wrap (db/get-employees-and-services  req)))}}]
+       ;(db/get-employees-and-services %))}}]
+       ["/get-free-dates/:employee/:length"
+        {:get {:handler (fn [req] (text-wrap (db/get-free-dates req)))}}]
+       ["/min-max-date" {:get {:handler (fn [req] (text-wrap (db/min-max-date)))}}]
+       ["/get-free-times/:employee/:date" {:get {:handler (fn [req] (text-wrap (db/get-free-times req)))}}]
+       ["/shop-data" {:get {:handler (fn [req] (text-wrap (db/shop-data req)))}}]
+
+
+       ["/add-reservation" {:post {:handler #()}}]
+
+
        ["/post-request" {:post {:handler (fn [req] (text-wrap (str (:params req))))}}]
        ["/login" {:get (fn [req] (html-wrap (views/login-page req)))
                   :post post-login}]
-       ["/shop-data" {:get (fn [req] (text-wrap (db/shop-data req)))}]
        ["/add-user" {:post (fn [req]
                              (let [params (:params req)]))}]
                               ;(text-wrap (db/add-user (assoc params :password (hashers/encrypt (:password params)))))))}]
-       ["/logout" {:get post-logout}]
-       ["/user" {:get (fn [req] (request-wrap 200 "text/plain" (:identity (:session req))))}]
+       ["/logout" {:get {:handler post-logout}}]
+       ;["/user" {:get (fn [req] (request-wrap 200 "text/plain" (:identity (:session req))))}]
        ["/users" {:get (fn [req] (request-wrap 200 "text/plain" (str @connected-users)))}]
        ["/chsk" {:get ring-ajax-get-or-ws-handshake
                  :post ring-ajax-post}]
@@ -364,6 +590,5 @@
         #(wrap-transit-params % {:opts {}})
         #(wrap-authentication % backend)
         #(wrap-authorization % backend)
-        #(wrap-defaults % (assoc-in site-defaults [:security :anti-forgery] true))]})))
-
-
+        #(wrap-defaults % (assoc-in site-defaults [:security :anti-forgery] true))
+        #(wrap-shop-id %)]})))

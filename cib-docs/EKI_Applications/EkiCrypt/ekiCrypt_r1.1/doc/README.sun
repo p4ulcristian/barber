@@ -1,0 +1,21 @@
+A forditashoz es teszteleshez hasznalt Solaris rendszer:
+--------------------------------------------------------
+
+SunOS 5.7 sun4u sparc
+
+gcc verzio: 2.95.1
+
+Reading specs from /usr/local/langs/gcc-2.95.1/lib/gcc-lib/sparc-sun-solaris2.7/2.95.1/specs
+gcc version 2.95.1 19990816 (release)
+ /usr/local/langs/gcc-2.95.1/lib/gcc-lib/sparc-sun-solaris2.7/2.95.1/cpp -lang-c -v -D__GNUC__=2 -D__GNUC_MINOR__=95 -Dsparc -Dsun -Dunix -D__svr4__ -D__SVR4 -D__sparc__ -D__sun__ -D__unix__ -D__svr4__ -D__SVR4 -D__sparc -D__sun -D__unix -Asystem(unix) -Asystem(svr4) -D__GCC_NEW_VARARGS__ -Acpu(sparc) -Amachine(sparc) -
+GNU CPP version 2.95.1 19990816 (release) (sparc)
+#include "..." search starts here:
+#include <...> search starts here:
+ /usr/local/include
+ /usr/local/langs/gcc-2.95.1/lib/gcc-lib/sparc-sun-solaris2.7/2.95.1/../../../../sparc-sun-solaris2.7/include
+ /usr/local/langs/gcc-2.95.1/lib/gcc-lib/sparc-sun-solaris2.7/2.95.1/include
+ /usr/include
+End of search list.
+The following default directories have been omitted from the search path:
+ /usr/local/langs/gcc-2.95.1/lib/gcc-lib/sparc-sun-solaris2.7/2.95.1/../../../../include/g++-3
+End of omitted list.

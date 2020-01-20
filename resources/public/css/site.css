@@ -127,3 +127,156 @@ color: rgb(255, 226, 38);
  border-bottom: 1px solid rgb(255, 226, 38);
  transition: 0.2s border-bottom ease-out;
  }
+
+
+
+ .one-draggable {
+ background: white;
+ padding: 5px;
+ border-radius: 5px;
+ border: 1px solid #222;
+
+ margin-top: 5px;
+ }
+ .one-draggable > div{
+ padding: 5px;
+
+
+ }
+
+ .confirm-button{
+ border: 2px solid lightgrey;
+ border-radius: 10px;
+ background: rgb(255, 204, 71)
+ }
+  .confirm-button:hover{
+  border: 2px solid white;
+ transition: 0.2s ease;
+
+  }
+ .decline-button{
+ border: 2px solid lightgrey;
+  border-radius: 10px;
+  background: rgb(255, 204, 71);}
+    .decline-button:hover{
+    border: 2px solid white;
+   transition: 0.2s ease;
+
+    }
+
+.example-track{
+background:lightgrey;
+height: 25px;
+
+
+}
+.example-track-1{
+background: rgb(255, 226, 38);
+}
+.example-track-3{
+background: rgb(255, 226, 38);
+}
+.example-track-5{
+background: rgb(255, 226, 38);
+}
+.example-track-7{
+background: rgb(255, 226, 38);
+}
+.example-trargb(255, 226, 38){
+background: rgb(255, 226, 38);
+}
+.example-track-11{
+background: rgb(255, 226, 38);
+}
+.example-track-13{
+background: rgb(255, 226, 38);
+}
+
+.example-thumb{
+height: 25px;
+
+
+}
+
+.in-thumb{
+padding-left: 2px;
+padding-right: 2px;
+
+background: white;
+color: #222!important;
+border-top: 1px solid lightgrey;
+border-bottom: 1px solid lightgrey;
+
+
+height: 23px;
+vertical-align: center;s
+}
+
+.in-thumb:hover{
+cursor: pointer;
+
+}
+
+.in-thumb:focus{
+
+outline: none;
+}
+
+.in-thumb-left{
+outline: none;
+transform: translateY(-15px);
+}
+
+.in-thumb-right{
+
+transform: translateY(10px);
+
+}
+
+
+
+
+.horizontal-slider{
+background:red;
+
+
+}
+
+.this-date{
+min-width: 300px;
+}
+
+.draggable-row{
+color: #222;
+background: white;
+border-radius: 5px;
+padding: 10px 20px;
+margin-bottom: 10px;
+}
+.active-employee{
+background: rgb(255, 226, 38);
+}
+
+.dnd-employees{
+width: 300px;
+}
+.dnd-services{
+width: 500px;
+}
+
+
+ .dragged
+ {
+ background: rgb(255, 226, 38)!important;
+ color: black;
+ }
+
+ .dnd-title{
+  color:black;
+  text-decoration: underline;
+
+ }
+ .dnd-title-drag{
+  color: black;
+  text-decoration: underline;
+ }

@@ -1,0 +1,33 @@
+@keyframes scaling {
+0% {height: 100px;}
+50% {height: 130px;}
+100% {height: 100px;}
+}
+
+#loading-logo
+{
+animation: scaling 2.5s infinite;
+
+width: auto;
+
+}
+
+
+.four-o-four-number
+{
+font-family: 'Playfair Display SC', serif;
+font-size: 3em;
+color: rgba(255,255,255,0.8);
+cursor: pointer;
+transition: 0.3 ease-out;
+padding: 3px 10px;
+}
+
+.four-o-four
+{
+font-family: 'Playfair Display SC', serif;
+font-size: 1.5em;
+cursor: pointer;
+transition: 0.3 ease-out;
+padding: 3px 10px;
+}

@@ -1,0 +1,21 @@
+README.linux - Linux  megjegyzések
+README.sun - Solaris megjegyzések
+README.winnt - Windows NT megjegyzések
+README.sakide - sakide program használati útmutatója
+
+ekide.source - Az "ekide" nevû példaprogram forráskódja
+ekide_PreCompiled - Platformonként elõre lefordított ekide
+files - ez a file
+include - header fileok az ekiCrypt lib használatához
+libekiCrypt - Mindegyik platform ekiCrypt lib
+test - test adatok, teszt kulcs
+
+ekide.source/getopt: GNU libc getopt az ekide fordításához
+
+
+test könyvtár tartalma:
+IEB.des - teszt DES kulcs
+IEB.reg - teszt DES kulcs Windows NT registry-be
+cleartext - SSL AKI formátumú példaurl a 10-es üzenettípusra
+ciphertext - A cleartext file teszt kulccsal titkosított változata
+

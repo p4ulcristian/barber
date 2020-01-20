@@ -45,6 +45,7 @@
 (load-interceptors!)
 
 
+
 (let [;; For this example, select a random protocol:
       rand-chsk-type (if (>= (rand) 0.5) :ajax :auto)
       _ (->output! "Randomly selected chsk type: %s" rand-chsk-type)
@@ -89,7 +90,13 @@
 
 (defmethod -event-msg-handler :chsk/recv
   [{:as ev-msg :keys [?data]}]
-  (->output! "Push event from server: %s" ?data))
+  (let [[the-key the-data] ?data]
+    (case the-key
+       :calendar/update (do
+                          (.log js/console (str "Calendar update: " (:date the-data)))
+                          (if (= (:date the-data) @(subscribe [:data :selected-date]))
+                            (dispatch [:get-reservations-and-brakes (:date the-data)])))
+       (->output! "Push event from server: %s" (first ?data)))))
 
 (defmethod -event-msg-handler :chsk/handshake
   [{:as ev-msg :keys [?data]}]

@@ -28,10 +28,15 @@
                  [ring-transit "0.1.6"]
                  [clj-time "0.15.2"]
                  [com.andrewmcveigh/cljs-time "0.5.2"]
-                 [thheller/shadow-cljs "2.8.64"]
+                 [com.draines/postal "2.0.3"]
                  [org.clojure/clojurescript "1.10.520"]
+                 [hara/io.scheduler "3.0.7"]
+
+                 ;Shadow Cljs libraries
+                 [thheller/shadow-cljs "2.8.83"]
                  [com.google.javascript/closure-compiler-unshaded "v20190325"]
                  [org.clojure/google-closure-library "0.0-20190213-2033d5d9"]]
+                 ;Shadow Cljs libraries]
 
 
 
@@ -46,7 +51,7 @@
   :main barber.server
   :clean-targets ^{:protect false}
   [:target-path
-   "resources/public/js/cljs-runtime"
+   "resources/public/js/"
    [:cljsbuild :builds :app :compiler :output-dir]
    [:cljsbuild :builds :app :compiler :output-to]]
 
@@ -58,13 +63,20 @@
                        :modules {:main {:init-fn barber.core/init!}}
                        :output-dir       "resources/public/js"
                        :devtools {:watch-dir "resources/public"
-                                  :after-load barber.core/mount-root}}}}
-
+                                  :after-load barber.core/mount-root}}
+                 :client {:target :browser
+                          :modules {:client {:init-fn barberclient.core/init!}}
+                          :output-dir       "resources/public/js"
+                          :devtools {:watch-dir "resources/public"
+                                     :after-load barberclient.core/mount-root}}}}
 
 
 
   :profiles {:uberjar {:source-paths ["src/barber/clj"]
                        :prep-tasks ["clean"
-                                    "compile" ["shadow" "release" "app"]]
+                                    "compile"
+                                    ["shadow" "compile" "app"]
+                                    ["shadow" "compile" "client"]]
+                                    ;"compile" ["shadow" "release" "client"]]
                        :aot :all
                        :omit-source true}})

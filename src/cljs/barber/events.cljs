@@ -155,6 +155,125 @@
   (fn [db [_ the-map]]
     (merge db the-map)))
 
+
+
+(reg-event-db
+  :set-modal
+  (fn [db [_ new-state]]
+    (assoc db :modal
+              (merge (:modal db)
+                     new-state))))
+
+
+
+
+(defn insert-at-index [idx coll value]
+  (let [[start end] (split-at idx coll)
+        new-vec (concat start [value] end)]
+    new-vec))
+
+(defn remove-at-index [coll pos]
+  (vec (concat (subvec coll 0 pos)
+               (subvec coll (inc pos)))))
+
+
+(defn anim-to [element timeout the-map]
+  (.to js/TweenMax element timeout (clj->js the-map)))
+
+
+(defn modify-position-in-vec [coll index-first index-second]
+  (let [value (get coll index-first)]
+    (insert-at-index index-second
+                     (remove-at-index coll index-first)
+                     value)))
+
+(defn reindex [coll]
+  (vec (map-indexed
+         #(assoc %2 :priority %1)
+         coll)))
+
+
+(defn new-order [coll type event-object]
+  (let [event-map (js->clj event-object :keywordize-keys true)
+        {:keys [source destination]} event-map
+        source-id (:index source)
+        destination-id (:index destination)]
+    (if destination-id (vec (reindex (modify-position-in-vec coll source-id destination-id)))
+                       coll)))
+
+
+(reg-event-fx
+  :modify-positions
+  (fn [cofx [_ the-key]]
+    {:chsk {:event-key (case the-key
+                         :employees :employees/modify-positions
+                         :services :services/modify-positions
+                         :error)
+            :data {:key (name the-key)
+                   :new-order (mapv #(assoc {}
+                                       :_id (:_id %)
+                                       :priority (:priority %))
+                                (get (:db cofx) the-key))}}}))
+            ;:callback #(do
+            ;             (.log js/console (str %))}}}))
+
+
+(reg-event-db
+  :modify-local-item
+  (fn [db [_ the-key id to-change value]]
+    (assoc-in db [the-key (first (keep-indexed
+                                   (fn [idx val]
+                                     (if (= id (:_id val))
+                                         idx
+                                         nil))
+                                   (get db the-key)))
+                  to-change]
+              value)))
+
+(reg-event-fx
+  :modify-item
+  (fn [cofx [_ the-key to-change id value]]
+    {:chsk {:event-key (case the-key
+                         :employees :employees/modify-item
+                         :services :services/modify-item
+                         :error)
+            :data {:key (name the-key)
+                   :to-change to-change
+                   :_id id
+                   :value value}
+            :callback #(do
+                         (dispatch [:modify-local-item the-key id to-change value]))}}))
+
+
+(defn key-plus-str [the-key the-str]
+  (keyword (apply str (rest (str the-key the-str)))))
+
+(reg-event-db
+  :restore-positions
+  (fn [db [_ the-key]]
+    (assoc db the-key (get
+                        db
+                        (key-plus-str the-key "-last-order")))))
+
+
+(reg-event-db
+  :drag-end
+  (fn [db [_ type event-object modal-content]]
+    (let [event-map (js->clj event-object :keywordize-keys true)
+          {:keys [source destination]} event-map
+          source-id (:index source)
+          destination-id (:index destination)]
+      (-> db
+        ((fn [the-db] (if (and destination-id (not= source-id destination-id))
+                        (assoc the-db :modal modal-content)
+                        the-db)))
+        ((fn [the-db]
+           (if destination-id
+             (do
+               (assoc the-db (key-plus-str type "-last-order") (get db type))
+               (assoc the-db type (new-order (vec (get db type)) type event-object)))
+             the-db)))))))
+
 (reg-event-db
   :assoc-data-to-key
   (fn [db [_ the-key the-map]]
@@ -187,21 +306,40 @@
                            #(assoc (second %) :reservation-id (str (first %)))
                            read-data)]
 
-           (.log js/console (str data))
+           ;(.log js/console (str data))
            (assoc db :calendar-data data-with-id))))
 
 
 
 (reg-event-fx
-  :get-reservations-and-breaks
+  :remove-calendar-event
+  (fn [cofx [_ res-id]]
+    {:chsk {:event-key :calendar/remove-event
+            :data {:date (:selected-date (:db cofx))
+                   :reservation-id res-id}
+            :callback #(do
+                         (dispatch [:add-to-db {:reservation-editor nil}]))}}))
+                         ;(.log js/console (str "visszatertem: " %)))}}))
+
+(reg-event-fx
+ :add-modify-calendar-event
+ (fn [cofx [_ data]]
+   {:chsk {:event-key :calendar/add-modify-event
+           :data data
+           :callback #(do
+                        (dispatch [:add-to-db {:reservation-editor nil}]))}}))
+                        ;(.log js/console (str "visszatertem: " %)))}}))
+
+(reg-event-fx
+  :get-reservations-and-brakes
   (fn [cofx [_ date]]
-      {;:db (assoc (:db cofx) :reservations nil :breaks nil)
-       :chsk {:event-key :calendar/get-reservations-and-breaks
+      {;:db (assoc (:db cofx) :reservations nil :brakes nil)
+       :chsk {:event-key :calendar/get-reservations-and-brakes
               :data date
               :callback #(do
                            (dispatch [:dec-loader])
                            (dispatch [:assoc-data-to-key :reservations (:reservations %)])
-                           (dispatch [:assoc-data-to-key :breaks (:breaks %)]))}}))
+                           (dispatch [:assoc-data-to-key :brakes (:brakes %)]))}}))
 
 (reg-event-fx
   :get-employees
@@ -210,7 +348,8 @@
        :chsk {:event-key :employees/get-all
               :callback #(do
                            (dispatch [:dec-loader])
-                           (dispatch [:assoc-data-to-key :employees %]))}}))
+                           (dispatch [:assoc-data-to-key :employees  (vec (sort-by :priority %))])
+                           (dispatch [:assoc-data-to-key :employees-last-order  (sort-by :priority %)]))}}))
 
 (reg-event-fx
   :get-services
@@ -219,7 +358,126 @@
        :chsk {:event-key :services/get-all
               :callback #(do
                            (dispatch [:dec-loader])
-                           (dispatch [:assoc-data-to-key :services %]))}}))
+                           (dispatch [:assoc-data-to-key :services (vec (sort-by :priority %))])
+                           (dispatch [:assoc-data-to-key :services-last-order (sort-by :priority %)]))}}))
+
+(reg-event-fx
+    :get-brake-types
+    (fn [_]
+      {:dispatch [:inc-loader]
+       :chsk {:event-key :brakes/get-brake-types
+              :callback #(do
+                           (dispatch [:dec-loader])
+                           (dispatch [:assoc-data-to-key :brake-types %]))}}))
+
+(reg-event-fx
+  :remove-brake-type
+  (fn [_ [_ id]]
+    {:dispatch [:inc-loader]
+     :chsk {:event-key :brakes/remove-brake-type
+            :data {:id id}
+            :callback #(do
+
+                         (dispatch [:dec-loader])
+                         (dispatch [:remove-brake-type-local id]))}}))
+
+(reg-event-fx
+  :add-brake-type
+  (fn [_ [_ braketype]]
+    {:dispatch [:inc-loader]
+     :chsk {:event-key :brakes/add-brake-type
+            :data {:braketype braketype}
+            :callback #(do
+                         (dispatch [:dec-loader])
+                         (dispatch [:add-brake-type-local %]))}}))
+
+(reg-event-db
+  :remove-brake-type-local
+  (fn [db [_ id]]
+    (assoc db :brake-types (vec (keep #(if (not= id (:_id %)) %)
+                                      (:brake-types db))))))
+
+(reg-event-db
+  :add-brake-type-local
+  (fn [db [_ data]]
+    (assoc db :brake-types (vec (conj (:brake-types db) data)))))
+
+(reg-event-db
+  :modify-reservation
+  (fn [db [_ reservation-id with-this]]
+    (let [the-res (first (filter
+                           #(= reservation-id (:reservation-id %))
+                           (:reservations db)))
+
+          without-the-res (vec (remove
+                                 #(= % the-res)
+                                 (:reservations db)))
+          new-res (if the-res
+                    (merge the-res with-this)
+                    without-the-res)
+          with-new-res (vec (conj without-the-res new-res))]
+      (if reservation-id
+        (if
+          (not= the-res new-res)
+          (dispatch [:set-modal
+                     {:open? true
+                      :content "Biztos módosítod?"
+                      :no-fn (fn [] (dispatch [:add-to-db {:reservations (:reservations db)}]))
+                      :yes-fn (fn [] ;(update-func @edit-text)
+                                  (dispatch [:add-modify-calendar-event new-res]))}]))
+        (dispatch [:set-modal
+                   {:open? true
+                    :content "Biztos hozzáadod?"
+                    :no-fn (fn [] (dispatch [:add-to-db {:reservations (:reservations db)}]))
+                    :yes-fn (fn [] ;(update-func @edit-text)
+                              (dispatch [:add-modify-calendar-event with-this]))}]))
+      (assoc db :reservations with-new-res))))
+
+
+
+(reg-event-fx
+  :get-brakes-on-dates
+  (fn [_ [_ dates employees]]
+    {:dispatch [:inc-loader]
+     :chsk {:event-key :brakes/get-brakes-on-dates
+            :data {:dates dates :employees employees}
+            :callback #(do
+                         (dispatch [:dec-loader])
+                         (dispatch [:assoc-data-to-key :brakes-on-dates %]))}}))
+
+(reg-event-fx
+  :get-clients
+  (fn [cofx [_]]
+    {:dispatch [:assoc-data-to-key :clients-skip (+ 20 (if (:clients-skip (:db cofx))
+                                                         (:clients-skip (:db cofx))
+                                                         0))]
+     :chsk {:event-key :clients/get-some
+            :data {:skip (if (:clients-skip (:db cofx))
+                           (:clients-skip (:db cofx))
+                           0)}
+            :callback #(do
+                         (dispatch [:assoc-data-to-key :clients (concat
+                                                                  (:clients (:db cofx))
+                                                                  %)]))}}))
+
+
+(reg-event-fx
+  :get-clients-count
+  (fn [cofx [_]]
+    {:chsk {:event-key :clients/get-count
+            :callback #(dispatch [:assoc-data-to-key :clients-count %])}}))
+
+(reg-event-fx
+  :add-brakes-to-dates
+  (fn [cofx [_ dates employees brake-id]]
+    {:dispatch [:inc-loader]
+     :chsk {:event-key :brakes/add-brakes-to-dates
+            :data {:dates dates :employees employees
+                   :brakes (:brakes (first (filter #(= (:_id %) brake-id)
+                                                   (:brake-types (:db cofx)))))}
+            :callback #(do
+                         (dispatch [:dec-loader])
+                         (dispatch [:get-brakes-on-dates dates employees]))}}))
 
 (reg-event-fx
   :get-user-data
@@ -229,6 +487,26 @@
             :callback #(do
                          (dispatch [:dec-loader])
                          (dispatch [:assoc-data-to-key :user-data %]))}}))
+
+(reg-event-fx
+  :add-new
+  (fn [_ [_ the-key]]
+    {:dispatch [:inc-loader]
+     :chsk {:event-key :employee-service/add
+            :data {:the-key (str (name the-key))}
+            :callback #(do
+                         (dispatch [(keyword (str "get-" (name the-key)))]))}}))
+                         ;(dispatch [:assoc-data-to-key : %]))}}))
+
+(reg-event-fx
+  :remove-employee-service
+  (fn [_ [_ the-key id]]
+    {:dispatch [:inc-loader]
+     :chsk {:event-key :employee-service/add
+            :data {:the-key (str (name the-key))
+                   :_id id}
+            :callback #(do
+                         (dispatch [(keyword (str "get-" (name the-key)))]))}}))
 
 (reg-event-fx
   :get-opening-hours
@@ -247,7 +525,10 @@
       (dispatch [:get-services])
       (dispatch [:get-employees])
       (dispatch [:get-server-time])
+      (dispatch [:get-brake-types])
       db))
+
+
 
 (reg-event-db
   :netflix-counter-init
@@ -278,10 +559,10 @@
 (reg-event-db
   :select-date
   (fn [db [_ date]]
-    (dispatch [:get-reservations-and-breaks date])
+    (dispatch [:get-reservations-and-brakes date])
     (assoc db
       :reservations nil
-      :breaks nil
+      :brakes nil
       :selected-date date
       :selected-day (apply get-day-from-date
                           (clojure.string/split date #"-")))))
@@ -294,17 +575,12 @@
       {:dispatch [:inc-loader]
        :ajax {:method :get
               :url "/server-time"
-              :handler #(do
-                          (dispatch [:select-date (first (read-string %))]))
+              :handler #(let [date (first (read-string %))]
+                          (dispatch [:assoc-data-to-key :today date])
+                          (dispatch [:select-date date]))
               :error-handler #(.log js/console "Failed to get server-time")}}))
 
-(reg-event-fx
-  :get-user
-  (fn [_]
-      {:ajax {:method :get
-              :url "/user"
-              :handler #(dispatch [:add-to-db {:user (cljs.reader/read-string %)}])
-              :error-handler #(.log js/console "Failed to get user")}}))
+
 
 
 (reg-event-fx
@@ -331,7 +607,6 @@
               :url "/add-user"
               :params params
               :handler #(.notification js/UIkit (str %))
-
               :error-handler #(.log js/console (str "Failed to add user " %))}}))
 
 
@@ -348,6 +623,7 @@
            :todos local-store-todos
            :loader-count 0
            :netflix-counter {}
+           :modal {:open? false}
            :sidebar-open? true
            :actual-page :calendar)}))   ;; all hail the new state to be put in app-db
 

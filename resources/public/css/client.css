@@ -1,0 +1,74 @@
+::-webkit-scrollbar {
+    display: none;
+}
+
+.four-o-four{
+font-size: 1.3em;
+}
+
+.playfair{
+font-family: 'Playfair Display SC', serif;}
+
+.one-step{
+border-radius: 5px;
+margin-bottom: 10px;
+}
+
+.one-item{
+padding: 7px;
+cursor: pointer;
+transition: 0.15s background ease-in-out;
+}
+
+.one-item:hover{
+background: rgb(255, 226, 38);
+transition: 0.15s background ease-in-out;
+}
+
+.one-title{
+border-bottom: 1px solid #222;
+padding: 10px 10px;
+margin-bottom: 0px;
+cursor: pointer;
+}
+
+.flatpickr-input{
+display: none;
+}
+
+.one-brake{
+font-size: 1.1em;
+border: 1px solid #222;
+border-radius: 5px;
+padding: 5px 10px;
+cursor: pointer;
+transition: 0.3s ease-in;
+}
+.one-brake:hover{
+background: rgb(255, 226, 38);
+transition: 0.3s background ease-in;
+
+}
+.active-brake{
+background: rgb(255, 226, 38);
+transition: 0.3s background ease-in;
+
+}
+
+.good-input{
+    border-radius: 2px;
+    border: 2px solid rgba(255, 226, 38, 0.9);
+}
+
+.bad-input{
+   border-radius: 2px;
+   border: 2px solid #222;
+}
+
+.the-email{
+padding: 5px 10px;
+background: rgba(255, 204, 71, 0.7);
+border-radius: 5px;
+border: 1px solid rgb(255, 226, 38);
+}
+

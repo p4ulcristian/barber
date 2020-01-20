@@ -1,0 +1,80 @@
+1999-12-14  Kónya Boldizsár  <konyab@ieb.hu>
+
+	* Verzió: 1.1
+
+	* Bugfix: urlencode
+
+	* Figyelem!!! Inkompatibilitás!!! ekiDecodeUrl elõtt nem kell urldecode-olni !!!
+
+	* Új függvény: ekiGetLibVersion
+
+1999-11-25  Kónya Boldizsár  <konyab@ieb.hu>
+
+	* Verzió: 1.0.5.1
+
+	* Kulcsverzió: 2
+
+	* Kis bugfix: linux: include javítás
+
+1999-11-25  Kónya Boldizsár  <konyab@ieb.hu>
+
+	* Verzió: 1.0.5
+
+	* Bugfix: byteorder függvények fordított hívása
+
+	* Új függvény: ekiGetKeyInfo (kulcs információinak kiolvasása)
+
+	* File-ok átnevezése: eki* -> saki*
+
+1999-10-21  Kónya Boldizsár  <konyab@ieb.hu>
+
+	* Verzió: 1.0.4
+
+	* Network byteorder szabványos használata
+
+1999-10-01  Kónya Boldizsár  <konyab@ieb.hu>
+
+	* Verzió: 1.0.3
+
+	* PC Linux platform, GNU C fordító támogatás (Boldi)
+
+	* Sun Solaris platform, GNU C fordító támogatás (Boldi)
+	
+	* Byte order függõ fordítás
+
+	* Bugfix: CRC probléma BIG ENDIAN esetben
+
+	* Verzió: 1.0.2.1
+
+	* Bugfix: ekiDecodeUrl() CRYPTO=1 esetén Bad Pad hiba, ha az enkódolt részben + van.
+
+	* Verzió: 1.0.2
+
+	* A des kulcs struktúrája változott, header információk kerültek bele: id, marketId, version, creation_date
+
+	* Új hibakód: UER_BADKEY (Rossz kulcs struktúra)
+
+	* A des kulcs file kiterjesztése .des-re változott
+
+	* A des kulcs registry path HKEY_LOCAL_MACHINE\SOFTWARE\IEB\EKI\Keys\<marketId> lett, a key value neve "des".
+	* CRYPTO=3 esetben a DATA mezõ dessel titkosított részt tartalmazhat, amit az ekiDecryptUrl() dekódol.
+
+	* CRYPTO mezõ benne marad az url-ben. ha a cryptoType paraméter NULL.
+
+	* Bugfix: '\n' kezelése
+
+	* Bugfix: CRYPTO mezõ kivétele az url-bõl
+
+	* AIX platform, GNU C fordító támogatás (Datanet)
+
+	* Verzió: 1.0.1
+
+	* Hivatalosan kiadott verzió
+	
+	* Bugfix
+
+	* Verzió: 1.0.0
+
+	* Eredeti verzió
+
+	

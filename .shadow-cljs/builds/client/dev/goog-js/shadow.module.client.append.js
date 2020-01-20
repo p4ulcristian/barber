@@ -1,0 +1,1 @@
+["^ ","~:resource-id",["~:shadow.build.modules/append","~:client"],"~:source","\nshadow.cljs.devtools.client.env.module_loaded('client');\n\nbarberclient.core.init_BANG_();","~:js","\nshadow.cljs.devtools.client.env.module_loaded('client');\n\nbarberclient.core.init_BANG_();"]
