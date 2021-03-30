@@ -3,8 +3,15 @@
     [hiccup.core :as hiccup]
     [ring.middleware.anti-forgery :as anti-forgery :refer :all]
     [hiccup.page :refer [include-js include-css html5]]
-    [config.core :refer [env]]))
+    [hiccup.element :refer [javascript-tag]]
+    [config.core :refer [env]]
+    [barber.db :as db]))
 
+
+
+
+
+(def version "57")
 
 (defn four-o-four []
   [:div [:div.uk-inline {:style "background: #222;
@@ -24,8 +31,6 @@
       [:circle {:cx "150" :cy "150" :r "148"
                 :stroke-width "1"
                 :stroke "#FFDC5A"}]]]]])
-
-
 
 
 (def loader-style [:style {:type "text/css"}
@@ -101,7 +106,8 @@
 
 (defn client-head [req]
   "Head with some metatags"
-  (let [shop-id (:shop-id req)]
+  (let [shop-id (:shop-id req)
+        barion-pixel-key (db/get-barion-pixel-key shop-id)]
     [:head
      [:title "Barbershop foglalás"]
      [:link {:rel "icon" :href "/favicon.png" :type "image/png"}]
@@ -110,17 +116,22 @@
              :content "width=device-width, initial-scale=1"}]
      [:meta {:name "theme-color"
              :content "#FFDC5A"}]
-     [:meta {:content "https://szeged.barbershopbp.hu" :property "og:url"}]
+     [:meta {:content (str "https://" shop-id ".barbershopbp.hu")
+             :property "og:url"}]
      [:meta {:content "website" :property "og:type"}]
      [:meta {:content "BarberShop foglalás" :property "og:title"}]
      [:meta {:content "Barbershop időpontfoglalórendszer" :property "og:description"}]
-     [:meta {:content (str "https://szeged.barbershopbp.hu/logo/" shop-id "fb?v=3")
+     [:meta {:content (str "https://" shop-id ".barbershopbp.hu/logo/" shop-id "fb?v=4")
              :property "og:image"}]
      loader-style
+     (javascript-tag (str "// Create BP element on the window\n            window[\"bp\"] = window[\"bp\"] || function () {\n                (window[\"bp\"].q = window[\"bp\"].q || []).push(arguments);\n            };\n            window[\"bp\"].l = 1 * new Date();\n    \n            // Insert a script tag on the top of the head to load bp.js\n            scriptElement = document.createElement(\"script\");\n            firstScript = document.getElementsByTagName(\"script\")[0];\n            scriptElement.async = true;\n            scriptElement.src = 'https://pixel.barion.com/bp.js';\n            firstScript.parentNode.insertBefore(scriptElement, firstScript);\n      \n            // Send init event\n            bp('init', 'addBarionPixelId',
+                      '" barion-pixel-key "');"))
+     (javascript-tag "!function(f,b,e,v,n,t,s)\n{if(f.fbq)return;n=f.fbq=function(){n.callMethod?\nn.callMethod.apply(n,arguments):n.queue.push(arguments)};\nif(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';\nn.queue=[];t=b.createElement(e);t.async=!0;\nt.src=v;s=b.getElementsByTagName(e)[0];\ns.parentNode.insertBefore(t,s)}(window,document,'script',\n'https://connect.facebook.net/en_US/fbevents.js');\n fbq('init', '825366881175562'); \nfbq('track', 'PageView');")
+
      (include-css "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/css/uikit.min.css")
      (include-css "/css/flatpickr.min.css")
      (include-css "https://fonts.googleapis.com/css?family=Playfair+Display+SC&display=swap")
-     (include-css "/css/client.css?v=5")
+     (include-css (str "/css/client.css?v=" version))
      (include-js "https://maps.googleapis.com/maps/api/js?key=AIzaSyAfwbhHb9Dq81Hh4K1I-_7xcho7B7IyCC0")]))
 
 
@@ -136,7 +147,7 @@
     (include-js "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/js/uikit-icons.min.js")
     (include-js "https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js")
     (include-js "https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js")
-    (include-js "/js/main.js?v=42")]))
+    (include-js (str "/js/main.js?v=" version))]))
 
 
 (defn client-page [req]
@@ -149,7 +160,7 @@
      mount-target
      (include-js "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/js/uikit.min.js")
      (include-js "https://cdn.jsdelivr.net/npm/uikit@3.2.7/dist/js/uikit-icons.min.js")
-     (include-js "/js/client.js?v=42")]))
+     (include-js (str "/js/client.js?v=" version))]))
 
 (defn unsuccessful-cancel [req]
   (html5
@@ -182,8 +193,8 @@
     (client-head req)
     [:body.playfair
      [:div.uk-inline {:style "background: #222;
-                  height: 100vh;
-                  width: 100vw;"}
+                              height: 100vh;
+                              width: 100vw;"}
       [:div.uk-position-center
        [:img.uk-align-center {:height "50px" :src "/img/logo.png" :style "z-index: 8000"}]
        [:div.uk-text-center

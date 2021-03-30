@@ -17,7 +17,8 @@
               (@server)
               (reset! server nil))
     (reset! server (run-server (wrap-reload #'app)
-                               {:port port :join? false}))))
+                               {:port port :join? false}))
+    (schedule/start-schedule!)))
     ;(handler/stop-router!)
     ;(handler/start-router!)))
 
@@ -25,7 +26,7 @@
   (-main)
   (server/stop!)
   (server/start!)
-  (schedule/start-schedule!)
+  ; (schedule/start-schedule!)
   ;(shadow/compile :app)
   (shadow/watch config-key))
 

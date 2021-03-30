@@ -1,6 +1,7 @@
 (ns barber.core
   (:require
    [reagent.core :as reagent :refer [atom]]
+   [reagent.dom :as rdom]
    [barber.views :as views]
    [reagent.session :as session]
    [reitit.frontend :as reitit]
@@ -22,7 +23,7 @@
 
 
 (defn mount-root []
-  (reagent/render [views/current-page] (.getElementById js/document "app")))
+  (rdom/render [views/current-page] (.getElementById js/document "app")))
 
 (defonce _start-once (sente/start!))
 

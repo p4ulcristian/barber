@@ -162,6 +162,10 @@
      (tr lng {:hu "Megértésedet köszönjük!"
               :en "Thank you for your understanding!"})]]])
 
+
+
+
+
 (defn email-success-confirm [lng]
   [:tr {:style "font-family: 'Helvetica Neue',Helvetica,Arial,sans-serif; box-sizing: border-box; font-size: 14px; margin: 0;"}
    [:td.content-block {:style "font-family: 'Helvetica Neue',Helvetica,Arial,sans-serif; box-sizing: border-box; font-size: 14px; vertical-align: top; margin: 0; padding: 0 0 20px;" :valign "top"}
@@ -169,6 +173,29 @@
                 font-size: 16px; color: #000; line-height: 1.6em; font-weight: 400; text-align: center; margin: 40px 0 0;" :align "center"}
      (tr lng {:hu "Kérjük hogy, mondd le az időpontod ha nem tudsz eljönni."
               :en "If you can't show up, please cancel your appointment"})]
+
+    [:p.aligncenter {:style "font-family: 'Helvetica Neue',Helvetica,Arial,'Lucida Grande',sans-serif; box-sizing: border-box;
+                font-size: 16px; color: #000; line-height: 1.6em; font-weight: 400; text-align: center; margin: 40px 0 0;" :align "center"}
+     (tr lng {:hu "Megértésedet köszönjük!"
+              :en "Thank you for your understanding!"})]]])
+
+
+
+
+(defn email-success-confirm-barion [lng params]
+  [:tr {:style "font-family: 'Helvetica Neue',Helvetica,Arial,sans-serif; box-sizing: border-box; font-size: 14px; margin: 0;"}
+   [:td.content-block {:style "font-family: 'Helvetica Neue',Helvetica,Arial,sans-serif; box-sizing: border-box; font-size: 14px; vertical-align: top; margin: 0; padding: 0 0 20px;" :valign "top"}
+    [:p.aligncenter {:style "font-family: 'Helvetica Neue',Helvetica,Arial,'Lucida Grande',sans-serif; box-sizing: border-box;
+                font-size: 16px; color: #000; line-height: 1.6em; font-weight: 400; text-align: center; margin: 40px 0 0;" :align "center"}
+     (tr lng {:hu "Sikeres fizetés a Barionon keresztül"
+              :en "Successful payment via Barion."})]
+    [:p.aligncenter {:style "font-family: 'Helvetica Neue',Helvetica,Arial,'Lucida Grande',sans-serif; box-sizing: border-box;
+                font-size: 16px; color: #000; line-height: 1.6em; font-weight: 400; text-align: center; margin: 40px 0 0;" :align "center"}
+     (:payment-id params)]
+    [:p.aligncenter {:style "font-family: 'Helvetica Neue',Helvetica,Arial,'Lucida Grande',sans-serif; box-sizing: border-box;
+                font-size: 16px; color: #000; line-height: 1.6em; font-weight: 400; text-align: center; margin: 40px 0 0;" :align "center"}
+     (tr lng {:hu "A személyzet kérésére az üzletben lehetséges hogy fel kell mutatnod ezt az emailt."
+              :en "The Barber may call you to show him this email for authentication!"})]
     [:p.aligncenter {:style "font-family: 'Helvetica Neue',Helvetica,Arial,'Lucida Grande',sans-serif; box-sizing: border-box;
                 font-size: 16px; color: #000; line-height: 1.6em; font-weight: 400; text-align: center; margin: 40px 0 0;" :align "center"}
      (tr lng {:hu "Megértésedet köszönjük!"
@@ -379,6 +406,22 @@
         (email-shop-data shop))
       lng)))
 
+(defn successful-confirmation-barion-email [shop params]
+  (let [shop (read-string shop)
+        lng (:language params)]
+    (email-body
+      (list
+        (email-header (:_id shop))
+        (email-title (tr lng {:hu "Sikeres fizetés!"
+                              :en "Successful payment!"}))
+
+        (email-invoice params)
+        (email-success-confirm-barion lng params)
+
+        (cancel-reservation lng (:_id shop) (:reservation-id params))
+        (email-shop-data shop))
+      lng)))
+
 
 (defn successful-cancellation-email [shop params]
   (let [shop (read-string shop)
@@ -426,6 +469,8 @@
                                              :en "Confirm your reservation."})
                   :confirm (tr language {:hu "Foglalás megerősítve."
                                          :en "Reservation confirmed."})
+                  :confirm-barion (tr language {:hu "Foglalás kifizetve és megerősítve."
+                                                :en "Reservation payed and confirmed."})
                   :cancel (tr language {:hu "Foglalás lemondva."
                                         :en "Reservation cancelled."})
                   :auto-cancel (tr language {:hu "Foglalásodat rendszerünk törölte."
@@ -434,6 +479,7 @@
                :content (case the-key
                           :pls-confirm (pls-confirm-email shop params)
                           :confirm (successful-confirmation-email shop params)
+                          :confirm-barion (successful-confirmation-barion-email shop params)
                           :cancel (successful-cancellation-email shop params)
                           :auto-cancel (automatic-cancellation-email shop params))}]})))
 

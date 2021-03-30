@@ -203,19 +203,12 @@
 
 
 (reg-event-fx
-  :modify-positions
+  :termekek/get
   (fn [cofx [_ the-key]]
-    {:chsk {:event-key (case the-key
-                         :employees :employees/modify-positions
-                         :services :services/modify-positions
-                         :error)
-            :data {:key (name the-key)
-                   :new-order (mapv #(assoc {}
-                                       :_id (:_id %)
-                                       :priority (:priority %))
-                                (get (:db cofx) the-key))}}}))
-            ;:callback #(do
-            ;             (.log js/console (str %))}}}))
+    {:chsk {:event-key :termekek/get
+            :data {:number 20
+                   :skip 20}
+            :callback #(.alert js/window "hello")}}))
 
 
 (reg-event-db
@@ -243,6 +236,16 @@
                    :value value}
             :callback #(do
                          (dispatch [:modify-local-item the-key id to-change value]))}}))
+
+(reg-event-fx
+  :modify-employee-service
+  (fn [cofx [_ emp-id modified-service]]
+    {:chsk {:event-key :employees/modify-employee-service
+            :data {:modified-service modified-service
+                   :emp-id emp-id}
+
+            :callback #(do
+                         (.log js/console "hello there" emp-id modified-service))}}))
 
 
 (defn key-plus-str [the-key the-str]
@@ -502,7 +505,7 @@
   :remove-employee-service
   (fn [_ [_ the-key id]]
     {:dispatch [:inc-loader]
-     :chsk {:event-key :employee-service/add
+     :chsk {:event-key :employee-service/remove
             :data {:the-key (str (name the-key))
                    :_id id}
             :callback #(do

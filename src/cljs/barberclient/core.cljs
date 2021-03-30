@@ -1,6 +1,7 @@
 (ns barberclient.core
   (:require
     [reagent.core :as reagent :refer [atom]]
+    [reagent.dom :as rdom]
     [reagent.session :as session]
     [reitit.frontend :as reitit]
     [clerk.core :as clerk]
@@ -23,6 +24,7 @@
                      :email nil
                      :phone nil
                      :agreement false
+                     :payment "cash"
                      :marketing false}
          :validation {:name nil
                       :email nil
@@ -131,7 +133,6 @@
              :handler #(let [data (read-string %)
                              employees (:employees data)
                              services (:services data)]
-                         (.log js/console (str "wat" (first data)))
                          (swap! app-state assoc
                                 :employees employees
                                 :services services)
@@ -155,6 +156,11 @@
              :handler #(swap! app-state assoc
                               :shop-data (read-string %))
              :error-handler #(js/window.alert "Error shop-data")}))
+
+(defn get-barion-payment-state [id]
+  (ajax-get {:url (str "/barion-payment-state/" id)
+             :handler #(swap! app-state assoc :barion-state %)
+             :error-handler #(js/window.alert "Error get-employees-and-services")}))
 
 (defn two-digits [number]
   (if (= (count (str number)) 1)
@@ -187,13 +193,16 @@
 
 (def router
   (reitit/router
-    [["/" :index]]))
+    [["/" :index]
+     ["/barion-redirect" :barion]]))
 
 (defn set-chosen [the-key the-data]
   (swap! app-state assoc-in [:reservation the-key] the-data))
 
 (defn get-chosen [the-key]
   (get-in @app-state [:reservation the-key]))
+
+
 
 (defn has-chosen? [the-key]
   (if (get-in @app-state [:reservation the-key])
@@ -244,7 +253,6 @@
                        "/" date)
              :handler #(do
                          (let [brakes-emp (free-times->emp (read-string %))]
-                           ;(.log js/console (str "hello: " brakes-emp))
                            (swap! app-state assoc
                                   :brakes-emp brakes-emp
                                   :free-times (vec (sort (merge-free-times brakes-emp))))))
@@ -252,8 +260,7 @@
 
 
 (defn get-free-dates [employee length]
-  (ajax-get {:url (str "/get-free-dates/" employee
-                       "/" length)
+  (ajax-get {:url (str "/get-free-dates/" employee "/" length)
              :handler #(let [new-free-dates (read-string %)
                              any-free? (not (empty? new-free-dates))]
                          (swap! app-state assoc :free-dates new-free-dates)
@@ -344,7 +351,6 @@
               "active-brake")
      :on-click (fn [a]
                  (set-chosen :start time)
-                 (.log js/console (str "hello: " (rand-nth (get (:brakes-emp @app-state) time))))
                  (set-chosen :employee (let [this-id (rand-nth (get (:brakes-emp @app-state) time))]
                                          (first (filter
                                                   #(= this-id (:_id %))
@@ -385,7 +391,7 @@
         the-times (fn [] (if (= (:actual-date @app-state)
                                 (:date (:reservation @app-state)))
                            (filter
-                             (fn [a] (< (+ (:actual-time @app-state) 120)
+                             (fn [a] (< (+ (:actual-time @app-state) 60)
                                         a))
                              (old-times))
                            (old-times)))]
@@ -479,13 +485,42 @@
     (swap! app-state assoc :sending :loading)
     (ajax-post {:url "/reserve"
                 :params res-map
-                :handler #(swap! app-state assoc :sending (case %
-                                                            "reserved" :reserved
-                                                            "success" :success
-                                                            %))
+                :handler #(do
+                            (.log js/console (str "reserve-data: " (read-string %)))
+                            (swap! app-state assoc :sending (case (:code (read-string %))
+                                                              "reserved" :reserved
+                                                              "success-with-cash" :success-with-cash
+                                                              "success-with-barion" :success-with-barion
+                                                              (.log js/console "coming back with: " %)))
+                            (if (= "success-with-barion" (:code (read-string %)))
+                              (.replace (.-location js/window)
+                                        (:details (read-string %)))))
+
                 :error-handler #(swap! app-state assoc :sending :fail
                                        :sending-error (str %))})))
     ;(swap! app-state assoc :sending :loading)))
+
+(defn choose-payment []
+  [:div.uk-margin.uk-grid-small.uk-child-width-1-1.uk-grid
+   [:h3.playfair
+    {:style {:margin-bottom "10px"}}
+    "Fizetesi modok:"]
+   [:div
+    [:label [:input.uk-radio {:on-change #(swap! app-state assoc-in [:user-data :payment] "cash")
+                              :checked (if (= "cash"
+                                              (:payment (:user-data @app-state)))
+                                         true false)
+                              :style {:margin "5px"}
+                              :type "radio" :name "cash"}] (tr {:hu "Készpénz" :en "Cash"})]]
+   [:div
+     [:label [:input.uk-radio {:on-change #(swap! app-state assoc-in [:user-data :payment] "barion")
+                               :checked (if (= "barion"
+                                               (:payment (:user-data @app-state)))
+                                          true false)
+                               :style {:margin "5px"}
+                               :type "radio" :name "barion"}]
+      (tr {:hu "Barion kártyás fizetés" :en "Barion card payment"})
+      [:img {:src "/img/barion/barion.svg"}]]]])
 
 (defn reserve-step []
   (reagent/create-class
@@ -505,9 +540,11 @@
                                        false "bad-input"
                                        nil)
                               :value (get-in @app-state [:user-data :email])
-                              :on-blur #(swap! app-state assoc-in [:validation :email] (validate-email (-> % .-target .-value)))
-                              :on-change #(swap! app-state assoc-in [:user-data :email] (-> % .-target .-value))
-                              :type "text" :placeholder (tr {:hu "E-mail" :en "Email"})}]]]
+                              :on-blur #(swap! app-state assoc-in [:validation :email]
+                                               (validate-email (-> % .-target .-value)))
+                              :on-change #(swap! app-state assoc-in [:user-data :email]
+                                                 (clojure.string/lower-case (-> % .-target .-value)))
+                              :type "email" :placeholder (tr {:hu "E-mail" :en "Email"})}]]]
           [:div.uk-margin
            [:div.uk-inline.uk-width-1-1
             [:span.uk-form-icon {:data-uk-icon "icon: user"}]
@@ -540,6 +577,7 @@
                                :max-length "9"
                                :placeholder (tr {:hu "Telefonszám" :en "Phone number"})}]]]]
 
+          ;[choose-payment]
           [:div.uk-margin.uk-grid-small.uk-child-width-auto.uk-grid
            [:label
             [:input.uk-checkbox {:type "checkbox"
@@ -551,17 +589,20 @@
             [:a
              {;:on-click #(js/window.open "http://localhost:3000/files/szeged-hozzajarulo.pdf")
               :target "_blank"
-              :href (str "http://localhost:3000/files/" (:_id (:shop-data @app-state))
-                                                        "-hozzajarulo.pdf")}
-             (tr {:hu "hozzájáruló nyilatkozat"
-                  :en "statement of consent"})]
+              :href (str "/files/" (:_id (:shop-data @app-state)) "-hozzajarulo.pdf")}
+             (tr {:hu "hozzájáruló nyilatkozat, "
+                  :en "statement of consent, "})]
+            [:a
+             {;:on-click #(js/window.open "http://localhost:3000/files/szeged-hozzajarulo.pdf")
+              :target "_blank"
+              :href (str "/files/aszf.pdf")}
+             (tr {:hu "Általános szerződési feltételeket "
+                  :en "Terms and Conditions "})]
             (tr {:hu " és az "
                  :en " and the "})
             [:a
              {:target "_blank"
-              :href (str "http://localhost:3000/files/"
-                         (:_id (:shop-data @app-state))
-                         "-altalanos.pdf")}
+              :href (str "/files/" (:_id (:shop-data @app-state)) "-altalanos.pdf")}
              (tr {:hu "adatkezelési tájékoztató"
                   :en "data management informant"})]
             (tr {:hu " feltételeit."
@@ -594,57 +635,81 @@
 
 
 (defn sending-reservation []
-  (let [new-button [:button.uk-button.uk-button-default.uk-button-small.uk-margin-top
-                    {:on-click #(do
-                                  (.log js/console (str @app-state))
-                                  (swap! app-state assoc :sending nil)
-                                  (set-chosen :start nil)
-                                  (set-chosen :date nil)
-                                  (get-free-dates
-                                    (:_id (get-chosen :employee))
-                                    (:length (get-chosen :service))))}
+  (reagent/create-class
+    {:component-did-mount #(.scrollTo js/window 0 0)
+     :reagent-render
+     (fn []
+       (let [new-button [:button.uk-button.uk-button-default.uk-button-small.uk-margin-top
+                         {:on-click #(do
+                                       ;(.log js/console (str @app-state))
+                                       (swap! app-state assoc :sending nil)
+                                       (set-chosen :start nil)
+                                       (set-chosen :date nil)
+                                       (get-free-dates
+                                         (:_id (get-chosen :employee))
+                                         (:length (get-chosen :service))))}
 
-                    (tr {:hu "Új foglalás"
-                         :en "New reservation"})]]
+                         (tr {:hu "Új foglalás"
+                              :en "New reservation"})]]
 
-    (if (:sending @app-state)
-      [:div.uk-card.uk-card-default.one-step
-       [:h3.playfair.one-title {:on-click #()}
-        (tr
-          (case (:sending @app-state)
-            :loading {:hu "Feldolgozás alatt..." :en "Processing..."}
-            :success {:hu "Igazold vissza foglalásod!" :en "Confirm your reservation!"}
-            :reserved {:hu "Foglalt!" :en "Already reserved!"}
-            :fail {:hu "Sikertelen foglalás" :en "Unsuccessful reservation"}
-            {:hu "Foglalások: " :en "Reservations: "}))]
-       [:div
-        [:div.uk-flex-center.uk-flex.uk-padding-small
-         (case (:sending @app-state)
-           :loading [:div.uk-padding  {:data-uk-spinner "true"}]
-           :reserved [:div
-                      [:div.uk-text-center
-                       [:span (tr {:hu "Időpontodat időközben más befoglalta. Köszönjük megértésed."
-                                   :en "Your appointment is already reserved by somebody else. Thank you for your understanding."})]]
-                      [:div.uk-text-right
-                       new-button]]
-           :success [:div
-                     [:div.uk-text-center
-                      [:span "Foglalásához a megerősítő emailt elküldtük a(z) '"]
-                      [:b (:email (:user-data @app-state))]
-                      [:span "' email címre."]]
-                     [:div.uk-text-right.uk-margin-large-top
-                      new-button]]
-           :fail [:div (tr {:hu "A foglalás meghiúsult"
-                            :en "Reservation failed"})
-                  [:div (tr {:hu "A hiba oka: "
-                             :en "The reason:"})
-                   (str (:sending-error @app-state))]
-                  [:div new-button]]
-           (str (:sending @app-state)))]]])))
+         (if (:sending @app-state)
+           [:div.uk-card.uk-card-default.one-step
+            [:h3.playfair.one-title {:on-click #()}
+             (tr
+               (case (:sending @app-state)
+                 :loading {:hu "Feldolgozás alatt..." :en "Processing..."}
+                 :success-with-cash {:hu "Igazold vissza foglalásod!" :en "Confirm your reservation!"}
+                 :success-with-barion {:en "Payment with Barion" :hu "Fizetés Barionnal"}
+                 :reserved {:hu "Foglalt!" :en "Already reserved!"}
+                 :fail {:hu "Sikertelen foglalás" :en "Unsuccessful reservation"}
+                 {:hu "Foglalások: " :en "Reservations: "}))]
+            [:div
+             [:div.uk-flex-center.uk-flex.uk-padding-small
+              (case (:sending @app-state)
+                :loading [:div.uk-padding  {:data-uk-spinner "true"}]
+                :reserved [:div
+                           [:div.uk-text-center
+                            [:span (tr {:hu "Időpontodat időközben más befoglalta. Köszönjük megértésed."
+                                        :en "Your appointment is already reserved by somebody else. Thank you for your understanding."})]]
+                           [:div.uk-text-right
+                            new-button]]
+                :success-with-cash [:div
+                                    [:div.uk-text-center
+                                     [:span (tr {:hu "Foglalásához a megerősítő emailt elküldtük a(z) '"
+                                                 :en "Your confirmation email has been sent to: "})]
+                                     [:b (:email (:user-data @app-state))]
+                                     [:span (tr {:hu "' email címre."
+                                                 :en ""})]]
+                                    [:div.uk-text-right.uk-margin-large-top
+                                     new-button]]
+                :success-with-barion [:div
+                                      [:div.uk-text-center
+                                       [:span (tr {:hu "Fizess a Barion hatterben megnyitott ablakaban"
+                                                   :en "Pay in the opened Barion window"})]]]
+                :fail [:div (tr {:hu "A foglalás meghiúsult"
+                                 :en "Reservation failed"})
+                       [:div (tr {:hu "A hiba oka: "
+                                  :en "The reason:"})
+                        (str (:sending-error @app-state))]
+                       [:div new-button]]
+                (str (:sending @app-state)))]]])))}))
 
 
+(defn wallpaper []
+  [:div
+   {:style {:background "url(/main.jpg)"
+            :background-size "cover"
+            :background-repeat "no-repeat";
+            :background-position "center";
+            :background-color "#222"
+            :position "fixed"
+            :top 0
+            :left 0
+            :z-index -1
+            :width "100%"
+            :height "100vh"}}])
 
-(defn steps []
+(defn reservation-steps []
   [:div.uk-padding
    [:div.uk-width-large.uk-align-center
     (if (= nil (:sending @app-state))
@@ -660,18 +725,7 @@
         (if (has-chosen? :start)
           [reserve-step])])
     [sending-reservation]]
-   [:div
-    {:style {:background "url(/main.jpg)"
-             :background-size "cover"
-             :background-repeat "no-repeat";
-             :background-position "center";
-             :background-color "#222"
-             :position "fixed"
-             :top 0
-             :left 0
-             :z-index -1
-             :width "100%"
-             :height "100vh"}}]])
+   [wallpaper]])
 
 
 
@@ -709,6 +763,7 @@
                     (if @last-open?
                       (if (= 13 (.-which a))
                         (yes-fn))))]
+
     (reagent/create-class
       {:component-did-mount #(do
                                (reset! esc-listener no-event)
@@ -855,7 +910,7 @@
   (let [lat (first coordinates)
         lng (second coordinates)
         latlng (js/google.maps.LatLng. lat lng)
-        map-canvas (reagent/dom-node this)
+        map-canvas (rdom/dom-node this)
         map-options (clj->js {"center" latlng
                               "zoom" 17
                               "options" {"styles" google-map-styles}})
@@ -872,15 +927,26 @@
   (reagent/create-class {:reagent-render home-render
                          :component-did-mount #(home-did-mount % coordinates)}))
 
+
+(defn barion-footer []
+  [:div.uk-align-center {:class "uk-width-1-1 uk-width-1-2@m"}
+   [:div.uk-text-center.uk-padding-small
+    {:style {:font-size "1.3em"}}
+    "Honlapunkon lehetseges a kartyas fizetes a barionos feluleten keresztul."]
+   [:img.uk-padding-small.uk-width-medium.uk-align-center.uk-margin-remove-top {:src "/img/barion/barion.svg"}]])
+
 (defn footer []
   (let [coordinates (:map-coordinates (:shop-data @app-state))]
-    [:div.uk-card.uk-card-secondary.uk-grid-collapse.playfair
+    [:section.uk-card.uk-card-secondary.uk-grid-collapse.playfair
      {:data-uk-grid true
       :style {:background "#222"}}
      [opening-hours]
      [contact]
+     [barion-footer]
      (if coordinates
        [google-maps coordinates])]))
+
+
 
 
 (defn one-lng [name the-key]
@@ -914,6 +980,44 @@
       [one-lng "HU |" :hu]]]]])
 
 
+(defn barion-page []
+  (reagent/create-class
+    {:component-did-mount #(do
+                             ;(.log js/console (:paymentId (:query-params @app-state)))
+                             (get-barion-payment-state
+                               (:paymentId (:query-params @app-state))))
+     :reagent-render
+     (fn []
+       (let [order-details (:order-details (read-string (:barion-state @app-state)))
+             service (:service order-details)
+             barber (:name (:employee-data order-details))
+             date (:date order-details)
+             start (:start order-details)]
+         [:div.uk-padding
+          [:div.uk-width-large.uk-align-center
+           [:div.uk-card.uk-card-default.one-step.uk-animation-fade
+            [:h3.playfair.one-title (tr {:hu "Sikeres fizetés"
+                                         :en "Successful payment"})]
+            [:div.uk-padding-small.p-no-margin
+             [:p [:b (tr {:hu "Tranzakció id: "
+                          :en "Transaction id: "})]
+                 (:paymentId (:query-params @app-state))]
+             [:p [:b (tr {:hu "Szolgáltatás: "
+                          :en "Service: "})]
+                 (tr {:hu (:name service)
+                      :en (:enname service)})]
+             [:p [:b "Barber: "]
+              barber]
+             [:p [:b (tr {:hu "Időpont: "
+                          :en "Time: "})]
+                 (to-readable-date date) " - "
+                 (convert-to-time start)]
+             [:h4.uk-padding-small.uk-text-center (tr {:hu "Fizetésed sikeres volt. Kérjük jelenj meg a foglalt időpontodon."
+                                                       :en "Your payment was successful. Please come to your reserved appointment."})]]]]
+             ;[:p "Barber: " barber]]]]
+             ;[:p "what: " order-details]]]]
+          [wallpaper]]))}))
+
 (defn client-page []
   [:div {:style {:min-height "100vh"}}
    (comment [:div.uk-card.uk-card-default
@@ -927,11 +1031,14 @@
    [:div.uk-flex.uk-flex-center.uk-flex-column
     {:style {:min-height "50vh"}}
     ;:background-size "cover"}}
-    [steps]]
+    (case (:current-page @app-state)
+      :barion [barion-page]
+      :index [reservation-steps])]
    [footer]])
 
 (defn mount-root []
-  (reagent/render [client-page] (.getElementById js/document "app")))
+  (rdom/render [client-page]
+               (.getElementById js/document "app")))
 
 
 
@@ -974,12 +1081,14 @@
      (fn [path]
        (let [match (reitit/match-by-path router path)
              current-page (:name (:data  match))
-             route-params (:path-params match)]
+             route-params (:path-params match)
+             query-params (:query (:parameters match))]
          (reagent/after-render clerk/after-render!)
-         ;(dispatch [:add-to-db {:current-page current-page
-         ;                       :route-params route-params)
+         (swap! app-state assoc
+                :current-page current-page
+                :route-params route-params
+                :query-params query-params)
          (clerk/navigate-page! path)))
-
      :path-exists?
      (fn [path]
        (boolean (reitit/match-by-path router path)))})

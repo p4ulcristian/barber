@@ -17,7 +17,6 @@
       (mapv #(assoc % :_id (str (:_id %)))
             coll))
 
-
 (def date-parser (f/formatter (t/default-time-zone) "YYYY-MM-dd" "YYYY/MM/dd"))
 
 
@@ -49,17 +48,16 @@
 (def reservation-queue (agent {}))
 (set-error-handler! reservation-queue(fn [a e]
                                        (future
-                                         (println :21 "restarting agent...")
+                                         (println :21 "restarting agent... with error" e)
                                          (restart-agent reservation-queue {})
                                          (println :22 "agent restarted, state=" @a))))
 
 (defn send-res-agent [res-func]
-  (println (str "to agent: " @reservation-queue))
+  (println (str "to agent queque: " @reservation-queue))
   (await (send reservation-queue (fn [a]
                                    (println "Reservation add started.") ;(str (res-func)))
                                    (assoc a :data (res-func)))))
   (str (:data @reservation-queue)))
-
 
 (defn generate-free-times [reservation-vectors opening-hours]
   (let [reserved-within-opening-hours  (concat
@@ -79,8 +77,6 @@
         expand-vectors
         re-arrange-to-free-times
         filter-valid-free-times)))
-
-
 
 (defn is-free? [free-times reservation-vec]
   "[[]] [] compares the free-times vector to the reservation vector"
@@ -239,7 +235,7 @@
        (let [coll (str shop-id "_clients")
              this-client (mc/find-one-as-map db coll {:email (:email user)})]
          (mc/update db coll
-                    {:email {:email user}}
+                    {:email (:email user)}
                     {"$set" (assoc
                               (dissoc user :email)
                               :confirmed
@@ -251,7 +247,7 @@
      (defn confirm-client [shop-id email]
       (let [coll (str shop-id "_clients")]
         (mc/update db coll
-                   {:email {:email email}}
+                   {:email email}
                    {"$set" {:confirmed true}})))
 
      (defn get-clients-count [shop-id]
@@ -309,7 +305,6 @@
                                {"$set" {(str "reservations." generated-id) (dissoc data :date :employee)
                                         :longest (get-longest free-times)
                                         :free-times free-times}}
-                                        ;:lel (str (assoc reservations generated-id data))}}
                                {:upsert true})
                     "success")
                 "reserved")))
@@ -368,6 +363,28 @@
                                     {"$exists" true}}
                            {"$set" {(str "reservations." res-id ".confirmed?")
                                     true}}))))
+
+
+
+     (defn calendar-update-event-payment-status [shop-id res-id status]
+       (let [coll (str shop-id "_calendar")]
+         (.getN (mc/update db coll {(str "reservations." res-id)
+                                    {"$exists" true}}
+                           {"$set" {(str "reservations." res-id ".payment-data.Status")
+                                    status
+                                    (str "reservations." res-id ".confirmed?")
+                                    (if (= status "Succeeded")
+                                      true)}}))))
+     (defn  calendar-update-event-payment [shop-id res-id payment-data]
+       (let [coll (str shop-id "_calendar")]
+         (.getN (mc/update db coll {(str "reservations." res-id)
+                                    {"$exists" true}}
+                           {"$set"
+                            (if (= "Succeeded" (:status payment-data))
+                              {(str "reservations." res-id ".payment-data") payment-data
+                               (str "reservations." res-id ".confirmed?") true}
+                              {(str "reservations." res-id ".payment-data") payment-data})}))))
+
 
 
      (defn get-reservation-for-email [shop-id res-id]
@@ -481,10 +498,17 @@
            (calendar-modify-event-employee shop-id data)
            (calendar-add-event-employee shop-id data))))
 
+     (defn barion-data [req]
+       (let [host  (get (:headers req) "host")
+             host-city (first (clojure.string/split host #"\."))]
+         (str (:barion (mc/find-one-as-map db "shops" {:_id host-city})))))
+
+
      (defn shop-data [req]
            (let [host  (get (:headers req) "host")
                  host-city (first (clojure.string/split host #"\."))]
-             (str (mc/find-one-as-map db "shops" {:_id host-city}))))
+             (str (dissoc (mc/find-one-as-map db "shops" {:_id host-city})
+                          :barion))))
 
      (defn get-opening-hours [request]
            (let [shop-id (get-shop-id request)
@@ -657,7 +681,7 @@
            (= employee "0")
            (str (vec (set (map :date (filter
                                        (fn [a]
-                                         (> (:longest a) length))
+                                         (>= (:longest a) length))
                                        (remove nil?
                                                (reduce concat
                                                        (for
@@ -671,7 +695,7 @@
            (str (mapv :date
                       (filter
                         (fn [a]
-                          (> (:longest a) length))
+                          (>= (:longest a) length))
                         (remove nil?
                                 (for
                                   [this-date date-vector]
@@ -847,6 +871,14 @@
                       {"$set" {:priority (dec (:priority this-one))}}))
 
          (str "success")))
+
+     (defn get-barion-pos-key [shop-id]
+       (:poskey (:barion (mc/find-one-as-map db "shops" {:_id shop-id}))))
+
+     (defn get-barion-pixel-key [shop-id]
+       (:pixel (:barion (mc/find-one-as-map db "shops" {:_id shop-id}))))
+
+
 
 
      (defn db-update-all [city]

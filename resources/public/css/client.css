@@ -1,7 +1,9 @@
 ::-webkit-scrollbar {
     display: none;
 }
-
+.p-no-margin > p{
+margin: 0px;
+}
 .four-o-four{
 font-size: 1.3em;
 }
@@ -72,3 +74,10 @@ border-radius: 5px;
 border: 1px solid rgb(255, 226, 38);
 }
 
+.active-event:focus{
+display: none;
+}
+
+.not-active-event{
+display: none;
+}

@@ -1,1 +1,0 @@
-This is for 64bit linux versions using kernel 3.x

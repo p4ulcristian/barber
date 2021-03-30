@@ -4,6 +4,8 @@
     ;[barber.middleware :refer [middleware]]
     [barber.views :as views]
     [barber.email :as email]
+    [cheshire.core :as cheshire]
+    [clj-http.client :as client]
     [barber.schedule :as schedule]
     [barber.db :as db]
     [taoensso.sente :as sente]
@@ -11,7 +13,7 @@
     [taoensso.encore :as encore :refer (have have?)]
     [taoensso.timbre :as timbre :refer (tracef debugf infof warnf errorf)]
     [taoensso.sente :as sente]
-    [ring.middleware.defaults]
+
     [hiccup.core :as hiccup]
     [compojure.core :as comp :refer (defroutes GET POST)]
     [compojure.route :as route]
@@ -20,16 +22,19 @@
     [clj-time.core :as t]
     [org.httpkit.server :as http-kit]
     [taoensso.sente.server-adapters.http-kit :refer (get-sch-adapter)]
-    [ring.middleware.defaults :refer [site-defaults wrap-defaults]]
+
     [buddy.hashers :as hashers]
     [buddy.auth :refer [authenticated?]]
     [ring.util.response :refer [response redirect]]
     [buddy.auth.backends.session :refer [session-backend]]
     [buddy.auth.middleware :refer [wrap-authentication wrap-authorization]]
     [ring.middleware.params :refer [wrap-params]]
+    [ring.middleware.keyword-params :refer [wrap-keyword-params]]
     [taoensso.sente.packers.transit :as sente-transit]
     [ring.middleware.transit :refer [wrap-transit-params]]
-    [clojure.java.io :as io])
+    [clojure.java.io :as io]
+    [ring.middleware.session.memory :as memory]
+    [ring.middleware.session :as session])
   (:gen-class)
   (:import [com.mongodb MongoOptions ServerAddress]
            org.bson.types.ObjectId))
@@ -38,6 +43,19 @@
 
 
 (defn uuid [] (java.util.UUID/randomUUID))
+
+(def barion-https "https://api.test.barion.com/")
+
+(def barion-endpoints
+  ["v2/Payment/Start"
+   "v2/Payment/GetPaymentState"
+   "v2/Payment/FinishReservation"
+   "v2/Payment/Capture"
+   "v2/Payment/CancelAuthorization"
+   "v2/Payment/Refund"
+   "v2/Withdraw/Banktransfer"
+   "v2/Accounts/Get"
+   "v2/Transfer/Email"])
 
 ;Creating user with hash
 (comment
@@ -93,7 +111,7 @@
 
 (defn text-wrap [content]
   "Wrap Plain Text"
-  (request-wrap 200 "text/plain" content))
+  (request-wrap 200 "text/plain" (str content)))
 
 (defn pdf-wrap [content]
   "Wrap PDF"
@@ -112,7 +130,8 @@
                       #"T")))))
 
 
-(reset! sente/debug-mode?_ true)
+"Emiatt van sok felesleges szoveg."
+(reset! sente/debug-mode?_ false)
 
 (def connected-users (atom {}))
 
@@ -180,7 +199,7 @@
         (when @broadcast-enabled?_ (broadcast! i))
         (recur (inc i)))))
 
-  (defn calendar-update [req date]
+  (defn calendar-wss-update [req date]
     (let [shop-id (:shop-id req)]
       (chsk-send! shop-id [:calendar/update
                            {:date date}])))
@@ -228,7 +247,7 @@
 
   (defmethod -sente-messages :calendar/add-modify-event
              [{:as ev-msg :keys [?reply-fn ?data ring-req]}]
-    (calendar-update ring-req (:date ?data))
+    (calendar-wss-update ring-req (:date ?data))
     (?reply-fn (db/send-res-agent
                  (fn []
                    (do
@@ -238,7 +257,7 @@
 
   (defmethod -sente-messages :calendar/remove-event
              [{:as ev-msg :keys [?reply-fn ?data ring-req]}]
-    (calendar-update ring-req (:date ?data))
+    (calendar-wss-update ring-req (:date ?data))
     (?reply-fn
       (do
         (db/add-log (:shop-id ring-req) (assoc ?data :type "remove-by-employee"))
@@ -288,7 +307,7 @@
     [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
     (?reply-fn (db/add-employee-service ring-req (:the-key ?data))))
 
-  (defmethod -sente-messages :employee-service/add
+  (defmethod -sente-messages :employee-service/remove
     [{:as ev-msg :keys [?reply-fn ring-req ?data]}]
     (?reply-fn (db/remove-employee-service ring-req
                                         (:the-key ?data)
@@ -429,6 +448,10 @@
     (str id)))
 
 
+
+
+
+
 (defn wrap-shop-id [handler]
   (fn [request]
     (let [shop-id (-> request get-shop-id)
@@ -450,12 +473,139 @@
    :shop "szeged"
    :user {:name "Paul"}})
 
+
+(defn get-status-and-payment-id [barion-answer]
+  {:status (get barion-answer "Status")
+   :payment-id (get barion-answer "PaymentId")})
+
+;{barion data amit elkell menteni
+; {:barion {
+          ; poskey: dsa
+          ; payee valami-email}}
+(defn barion-post-string [{:keys [res-id payer-hint service shop-id]}]
+  (cheshire/generate-string  {:POSKey (db/get-barion-pos-key shop-id) ;{:szeged "548934d3b23e4e56a28b8e88abd4aacd"})
+                                                                      ;:alba ""})
+                              :PaymentType "Immediate"
+                              :PaymentWindow "00:30:00"
+                              :GuestCheckout "true"
+                              :FundingSources ["All"]
+                              :PaymentRequestId res-id
+                              :OrderNumber res-id
+                              :PayerHint payer-hint
+                              :RedirectURL (str "https://" shop-id ".barbershopbp.hu/barion-redirect")
+                              :CallbackURL (str "https://" shop-id ".barbershopbp.hu/barion-callback")
+                              :Transactions [{:PosTransactionId res-id
+                                              :Payee "barbershopszeged@gmail.com"
+                                              :Total (:price service)
+                                              :Items [{:Name (:name service)
+                                                       :Description (:name service)
+                                                       :Quantity 1
+                                                       :Unit "db"
+                                                       :UnitPrice (:price service)}]}]}))
+
+(defn req-body-to-edn [req]
+  (cheshire/parse-string (:body req)))
+
+
+(defn get-barion-payment-state [shop-id payment-id]
+  (let [barion-answer (req-body-to-edn (client/get (str barion-https "/v2/Payment/GetPaymentState")
+                                                   {:accept :json :query-params
+                                                            {"POSKey" "548934d3b23e4e56a28b8e88abd4aacd"
+                                                             "PaymentId" payment-id}}))
+        res-id (get barion-answer "OrderNumber")
+        this-reservation (db/get-reservation-for-email shop-id res-id)]
+    (println "Barion state received: " this-reservation)
+    (db/calendar-update-event-payment shop-id res-id (get-status-and-payment-id barion-answer))
+    {:status (get barion-answer "Status")
+     :order-details
+             (assoc
+               this-reservation
+               :service (let [this-service (db/get-service shop-id (:service-id this-reservation))]
+                          {:name (:name this-service)
+                           :enname (:enname this-service)
+                           :price (:price this-service)})
+               :employee-data {:name (:name (db/get-employee shop-id (:employee this-reservation)))})}))
+
+
+
+(defn start-barion-payment [res-id shop-id email service]
+  (let [barion-answer (req-body-to-edn (client/post (str barion-https "/v2/Payment/Start")
+                                                    {:throw-exceptions false
+                                                     :body (barion-post-string {:res-id res-id
+                                                                                :shop-id shop-id
+                                                                                :service service
+                                                                                :payer-hint email})
+                                                     :content-type :json
+                                                     :socket-timeout 1000      ;; in milliseconds
+                                                     :connection-timeout 1000}))]
+    ;"Here we need a function which will update the reservation with the barion-data"
+    (println "sikeres barion fizetes " res-id " " shop-id " " barion-answer)
+    (db/calendar-update-event-payment shop-id res-id (get-status-and-payment-id barion-answer))
+    {:code "success-with-barion"
+     :details (get barion-answer "GatewayUrl")}))
+
+
+
+(defn schedule-deletion-of-reservation [req oid shop-data res-params]
+  (schedule/do-in-30-minutes
+    (str oid)
+    #(do
+       (db/calendar-remove-event (:_id (read-string  shop-data))
+                                 (:remove %))
+       (db/add-log (:shop-id (:req %)) (:res-params (:res-params %)))
+       (apply email/send-email (:email %))
+       (calendar-wss-update (:req %)
+                        (:date %)))
+    {:remove (str oid)
+     :req req
+     :res-params (assoc res-params :type "automatic-cancel")
+     :date (:date res-params)
+     :email [:auto-cancel
+             (db/shop-data req)
+             (assoc res-params :email (:email (:user res-params)))]}))
+
+(def store (memory/memory-store))
+
 (def app
   (do
     (start-router!)
     (reitit-ring/ring-handler
      (reitit-ring/router
-      [["/" {:get {:handler (fn [req] (html-wrap (views/client-page req)))}}]
+      [["/" {:get {:middleware [wrap-anti-forgery]
+                   :handler (fn [req] (html-wrap (views/client-page req)))}}]
+       ["/barion-payment-state/:payment-id" {:get
+                                             {:handler
+                                              (fn [req]
+                                                (text-wrap
+                                                  (str (get-barion-payment-state
+                                                         (:shop-id req)
+                                                         (:payment-id (:path-params req))))))}}]
+       ["/barion-callback" {:post {:handler (fn [req]
+                                              (let [payment-id (:paymentId (:params req))
+                                                    answer (get-barion-payment-state
+                                                             (:shop-id req)
+                                                             payment-id)
+                                                    status (:status answer)
+                                                    this-reservation (:order-details answer)]
+                                                (schedule/delete-task-from-schedule (:res-id (:path-params req)))
+                                                (println "Barion callback happening.: " req)
+                                                (text-wrap
+                                                      (if (= status "Succeeded")
+                                                        (do
+                                                          (email/send-email
+                                                            :confirm-barion
+                                                            (db/shop-data req)
+                                                            (merge {:payment-id payment-id
+                                                                    :reservation-id (get answer "OrderNumber")
+                                                                    :language :hu}
+                                                                   this-reservation))
+                                                          "Success")
+                                                        "Didn't succeed."))))}}]
+
+
+
+       ["/barion-redirect" {:get {:handler (fn [req]
+                                             (html-wrap (views/client-page req)))}}]
        ["/email" {:get {:handler (fn [req] (html-wrap
                                              (email/pls-confirm-email (db/shop-data req)
                                                                       email-config)))}}]
@@ -466,60 +616,60 @@
                                               (email/successful-cancellation-email
                                                 (db/shop-data req)
                                                 email-config)))}}]
-       ["/reserve" {:post {:handler (fn [req] (text-wrap
+       ["/reserve" {:post {:middleware [wrap-anti-forgery]
+                           :handler (fn [req] (text-wrap
                                                 (let [shop-data (db/shop-data req)
                                                       oid (ObjectId.)
-                                                      res-params (assoc (:params req) :reservation-id (str oid))]
+                                                      res-params (assoc (:params req) :reservation-id (str oid))
+                                                      is-barion? (if
+                                                                   (= "barion" (:payment (:user res-params)))
+                                                                   true false)]
                                                   (db/send-res-agent
                                                     (fn []
                                                       (do
-                                                        (calendar-update req (:date res-params))
-                                                        (schedule/do-in-30-minutes
-                                                          (str oid)
-                                                          #(do
-                                                             (db/calendar-remove-event (:_id (read-string  shop-data))
-                                                                                       (:remove %))
-                                                             (db/add-log (:shop-id (:req %)) (:res-params (:res-params %)))
-                                                             (apply email/send-email (:email %))
-                                                             (calendar-update (:req %)
-                                                                              (:date %)))
-                                                          {:remove (str oid)
-                                                           :req req
-                                                           :res-params (assoc res-params :type "automatic-cancel")
-                                                           :date (:date res-params)
-                                                           :email [:auto-cancel
-                                                                   (db/shop-data req)
-                                                                   (assoc res-params :email (:email (:user res-params)))]})
-
-
-                                                        (if (= "success" (db/calendar-add-event (:shop-id req) (assoc
-                                                                                                                 (dissoc res-params :user)
-                                                                                                                 :confirmed? false
-                                                                                                                 :name (:name (:user res-params))
-                                                                                                                 :email (:email (:user res-params))
-                                                                                                                 :phone (:phone (:user res-params)))))
+                                                        (calendar-wss-update req (:date res-params))
+                                                        (schedule-deletion-of-reservation req oid shop-data res-params)
+                                                        (if (= "success"
+                                                               (db/calendar-add-event
+                                                                 (:shop-id req)
+                                                                 (assoc
+                                                                   (dissoc res-params :user)
+                                                                   :payment (:payment (:user res-params))
+                                                                   :confirmed? false
+                                                                   :name (:name (:user res-params))
+                                                                   :email (:email (:user res-params))
+                                                                   :phone (:phone (:user res-params)))))
                                                           (do
                                                             (db/add-client
                                                               (:shop-id req)
                                                               (:user res-params))
-                                                            (email/send-email
-                                                              :pls-confirm
-                                                              shop-data
-                                                              (assoc res-params :email (:email (:user res-params))))
-                                                            (db/add-log (:shop-id req) (assoc res-params :type "reserve-by-guest"))
-                                                            "success")
-                                                          "reserved")))))))}}]
-
+                                                            (if is-barion?
+                                                              (do
+                                                                (db/add-log (:shop-id req) (assoc res-params :type "reserve-by-guest-barion"))
+                                                                (start-barion-payment (str oid)
+                                                                                      (:shop-id req)
+                                                                                      (:email (:user res-params))
+                                                                                      (db/get-service (:shop-id req) (:service-id res-params))))
+                                                              (do
+                                                                (email/send-email
+                                                                  :pls-confirm
+                                                                  shop-data
+                                                                  (assoc res-params :email (:email (:user res-params))))
+                                                                (db/add-log (:shop-id req) (assoc res-params :type "reserve-by-guest-cash"))
+                                                                {:code "success-with-cash"})))
+                                                          {:code "reserved"})))))))}}]
        ["/req" {:get {:handler (fn [req] (text-wrap (str req)))}}]
        ["/confirm/:res-id" {:get {:handler (fn [req] (html-wrap
-                                                       (let [this-reservation (db/get-reservation-for-email (:shop-id req) (:res-id (:path-params req)))]
+                                                       (let [this-reservation (db/get-reservation-for-email
+                                                                                (:shop-id req)
+                                                                                (:res-id (:path-params req)))]
                                                          (if
                                                            (= true (:confirmed? this-reservation))
                                                            (views/successful-confirm req)
                                                            (if (= 1 (db/calendar-confirm-event
                                                                       (:shop-id req) (:res-id (:path-params req))))
-                                                             ;true
                                                              (do
+                                                               (schedule/delete-task-from-schedule (:res-id (:path-params req)))
                                                                (db/confirm-client (:shop-id req) (:email this-reservation))
                                                                (email/send-email
                                                                  :confirm
@@ -528,7 +678,7 @@
                                                                          :language :hu}
                                                                         this-reservation))
                                                                (db/add-log (:shop-id req) (assoc this-reservation :type "confirm-by-guest"))
-                                                               (calendar-update req (:date this-reservation))
+                                                               (calendar-wss-update req (:date this-reservation))
                                                                (views/successful-confirm req))
                                                              (views/unsuccessful-confirm req))))))}}]
        ["/cancel/:res-id" {:get {:handler (fn [req] (html-wrap
@@ -541,54 +691,41 @@
                                                               this-res)
                                                             (schedule/delete-task-from-schedule (:res-id (:path-params req)))
                                                             (db/add-log (:shop-id req) (assoc this-res :type "cancel-by-guest"))
-                                                            (calendar-update req (:date this-res))
+                                                            (calendar-wss-update req (:date this-res))
                                                             (views/successful-cancel req))
                                                           (views/unsuccessful-cancel req)))))}}]
-
-       ["/files/:name" {:get {:handler (fn [req] (pdf-wrap (io/resource "/files/szeged-altalanos.pdf")))}}]
+       ;["/files/:name" {:get {:handler (fn [req] (pdf-wrap (io/resource "/files/szeged-altalanos.pdf")))}}]
        ["/logo/:name" {:get {:handler (fn [req] (png-wrap (str (:name (:path-params req)) ".png")))}}]
-       ["/calendar" {:get {:handler (fn [req]
-                                        (if (authenticated? (:session req))
-                                          (html-wrap (views/loading-page))
-                                          (redirect "/login")))}}]
+       ["/calendar" {:get {:middleware [wrap-anti-forgery]
+                           :handler (fn [req] (if (authenticated? (:session req))
+                                                (html-wrap (views/loading-page))
+                                                (redirect "/login")))}}]
        ["/server-time" {:get {:handler (fn [req] (server-time-handler req))}}]
-
        ["/get-employees-and-services" {:get {:handler (fn [req] (text-wrap (db/get-employees-and-services  req)))}}]
-       ;(db/get-employees-and-services %))}}]
-       ["/get-free-dates/:employee/:length"
-        {:get {:handler (fn [req] (text-wrap (db/get-free-dates req)))}}]
+       ["/get-free-dates/:employee/:length" {:get {:handler (fn [req] (text-wrap (db/get-free-dates req)))}}]
        ["/min-max-date" {:get {:handler (fn [req] (text-wrap (db/min-max-date)))}}]
        ["/get-free-times/:employee/:date" {:get {:handler (fn [req] (text-wrap (db/get-free-times req)))}}]
        ["/shop-data" {:get {:handler (fn [req] (text-wrap (db/shop-data req)))}}]
-
-
-       ["/add-reservation" {:post {:handler #()}}]
-
-
        ["/post-request" {:post {:handler (fn [req] (text-wrap (str (:params req))))}}]
-       ["/login" {:get (fn [req] (html-wrap (views/login-page req)))
-                  :post post-login}]
-       ["/add-user" {:post (fn [req]
-                             (let [params (:params req)]))}]
-                              ;(text-wrap (db/add-user (assoc params :password (hashers/encrypt (:password params)))))))}]
+       ["/login" {:get {:middleware [wrap-anti-forgery]
+                        :handler (fn [req] (html-wrap (views/login-page req)))}
+                  :post {:middleware [wrap-anti-forgery]
+                         :handler post-login}}]
        ["/logout" {:get {:handler post-logout}}]
-       ;["/user" {:get (fn [req] (request-wrap 200 "text/plain" (:identity (:session req))))}]
        ["/users" {:get (fn [req] (request-wrap 200 "text/plain" (str @connected-users)))}]
-       ["/chsk" {:get ring-ajax-get-or-ws-handshake
-                 :post ring-ajax-post}]
-       ["/items"
-        ["" {:get {:handler (html-wrap (views/loading-page))}}]
-        ["/:item-id" {:get {:handler (html-wrap (views/loading-page))
-                            :parameters {:path {:item-id int?}}}}]]
-       ["/about" {:get {:handler (fn [req] (html-wrap (views/loading-page)))}}]])
+       ["/chsk" {:get {:middleware [wrap-anti-forgery]
+                       :handler ring-ajax-get-or-ws-handshake}
+                 :post {:middleware [wrap-anti-forgery]
+                        :handler ring-ajax-post}}]])
      (reitit-ring/routes
       (reitit-ring/create-resource-handler {:path "/" :root "/public"})
       (reitit-ring/create-default-handler))
      {:middleware
-       [ring.middleware.keyword-params/wrap-keyword-params
-        ring.middleware.params/wrap-params
-        #(wrap-transit-params % {:opts {}})
-        #(wrap-authentication % backend)
-        #(wrap-authorization % backend)
-        #(wrap-defaults % (assoc-in site-defaults [:security :anti-forgery] true))
-        #(wrap-shop-id %)]})))
+       [wrap-params
+        wrap-keyword-params
+        ;[wrap-defaults (assoc-in site-defaults [:security :anti-forgery] false)]
+        [session/wrap-session {:store store}]
+        [wrap-transit-params  {:opts {}}]
+        [wrap-authentication  backend]
+        [wrap-authorization  backend]
+        wrap-shop-id]})))

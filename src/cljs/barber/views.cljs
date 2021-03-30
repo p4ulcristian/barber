@@ -86,9 +86,7 @@
                                          :number (if (js/isNaN (js/parseInt (-> % .-target .-value)))
                                                    0
                                                    (js/parseInt (-> % .-target .-value)))
-
                                          (-> % .-target .-value))))
-
                :auto-focus  true
                :value       @edit-text}]
              [:div [:span.uk-text-middle {:data-uk-icon    "close"
@@ -114,7 +112,7 @@
                                                                           :yes-fn (fn [] (update-func @edit-text))}])
                                                               (reset! editing? false))}]]]
             [:div.editable.uk-flex
-             [:div.uk-text-truncate
+             [:div
               [:b text]]
              [:span {:width           "40px"
                      :on-click        #(do
@@ -140,8 +138,56 @@
    component])
 
 
+(defn modify-employee-services [services employee]
+  (let [id (:_id employee)
+        emp-services (:services employee)
+        get-this-service (fn [service-id] (first (filter #(= service-id (:_id %))
+                                                         emp-services)))
+        modified-service (fn [service-id] (let [mod-serv (get-this-service service-id)]
+                                            (if mod-serv mod-serv {})))
+        dispatch-change (fn [id service-id the-key value]
+                          (dispatch [:modify-employee-service id
+                                     (assoc (modified-service service-id)
+                                       the-key value)]))
+        overridden-service (fn [service]
+                             (let [emp-service (get-this-service (:_id service))]
+                               (if emp-service (merge service emp-service)
+                                               service)))]
+
+    [:div
+     (str employee)
+     [:table.uk-table.uk-table-hover
+      [:tr
+       [:th "Név"]
+       [:th "Hossz"]
+       [:th "Ár"]
+       [:th "Rejtett?"]]
+      (map #(-> ^{:key (random-uuid)} (let [the-service (overridden-service %)
+                                            service-id (:_id the-service)]
+                                        [:tr
+                                         [:td (:name the-service)]
+                                         [:td [editable {:type :text
+                                                         :text (:length the-service)
+                                                         :update-func (fn [value] (dispatch-change service-id id :length value))}]]
+                                         [:td [editable {:type :text
+                                                         :text (:price the-service)
+                                                         :update-func (fn [value] (dispatch-change service-id id :price value))}]]
+                                         [:td [:input.uk-checkbox
+                                               {:on-change (fn [value] (dispatch-change service-id id :hidden? value))
+                                                :type "checkbox" :value true}
+                                               (:available? the-service)]]]))
+           services)]]))
 
 
+(defn employee-services [employee]
+  (let [show-services? (atom false)
+        services (subscribe [:data :services])]
+    (fn [id]
+      [:div
+       [:div.uk-text-right [:a
+                            {:on-click #(reset! show-services? (not @show-services?))}
+                            "Szolgáltatások..."]]
+       (if @show-services? [modify-employee-services @services employee])])))
 
 (defn draggable-content [the-key data snapshot]
   [:div
@@ -162,7 +208,8 @@
                                    :type :text
                                    :update-func #(dispatch [:modify-item the-key :name (:_id data)  %])}]]]
                  ;[:div "Id: " [:b (:id data)]]
-                 [:div "Prio: "  [:b (inc (:priority data))]]]
+                 [:div "Prio: "  [:b (inc (:priority data))]]
+                 [employee-services data]]
      :services [:<>
 
                 [:div [:b {:class (if (.-isDragging snapshot) "dnd-title-drag" "dnd-title")
@@ -281,6 +328,9 @@
 (defn set-gsap [element the-map]
   (.set js/TweenMax element (clj->js the-map)))
 
+
+
+
 (defn todo-input [{:keys [title on-save on-stop]}]
   (let [val  (reagent/atom title)
         stop #(do (reset! val "")
@@ -391,6 +441,8 @@
     (str hours ":" minutes)))
 
 
+
+(def hovered? (atom false))
 
 (defn one-event [id start-left start-top start-height the-event]
   (let [length (atom (* step-minute start-height))
@@ -594,6 +646,7 @@
 
                        ;Left and Right Boundaries
                        ;(.log js/console (str "left: " new-left" gridwidth: " scroll-width))
+
                        (if (and
                              (<= (+ rect-left (/ grid-width 2)) (first @last-mouse-pos))
                              (<= (first @last-mouse-pos)
@@ -649,8 +702,8 @@
                              (add-event-listener js/window "mousemove" @drag-move-listener)
                              (add-event-listener js/window  "mouseup" @drag-end-listener)
                              (add-event-listener js/window "scroll" @scroll-listener)))
-                         false))
-        hovered? (atom false)]
+                         false))]
+
 
 
 
@@ -678,11 +731,15 @@
          [:div.one-event.uk-inline
           {:class (if @dragged? "active" "")
            :id id
-           :on-click #(reset! hovered? true)
-           :on-mouse-leave #(reset! hovered? false)
+           :on-click #(if (= @hovered? id)
+                        (reset! hovered? nil)
+                        (reset! hovered? id))
+           ;:on-mouse-leave #(reset! hovered? false)
            :style {;:overflow "hidden"
                    :touch-action "none"
-                   :z-index (if @hovered? 1000 1)
+                   :z-index (if (or dragged?
+                                    (= id @hovered?))
+                              1000 1)
                    :cursor  (if @dragged? "grabbing" "grab")
                    :left 0
                    :padding-left "5px"
@@ -701,14 +758,23 @@
                                 :else "black")
                    :transition "0.01s transform ease"
                    :position "absolute"
-                   :background (cond (= true (:confirmed? the-event))
-                                     "rgb(255, 194, 0)"
-                                     (= false (:confirmed? the-event))
-                                     "#FF6F48"
-                                     :else "lightgreen")
+                   :background (cond
+                                 (and
+                                   (= false (:confirmed? the-event))
+                                   (map? (:payment-data the-event)))
+                                 "#9c2d10"
+                                 (and
+                                   (= true (:confirmed? the-event))
+                                   (= "Succeeded" (:status (:payment-data the-event))))
+                                 "lightblue"
+                                 (= true (:confirmed? the-event))
+                                 "rgb(255, 194, 0)"
+                                 (= false (:confirmed? the-event))
+                                 "#FF6F48"
+                                 :else "lightgreen")
 
                    :border "0.5px solid #222"
-                   :opacity (if @dragged? 1 1)
+                   ;:opacity (if @dragged? 1 1)
                    ;:border-top-right-radius "10px"
                    :width (str (- (- grid-width border-width) 8) "px")
                    :height (str (- @height 7) "px")}}
@@ -735,7 +801,7 @@
                  :style {:cursor "ns-resize"
                          :height "10px" :width (- (- grid-width border-width) 4)
                          :bottom 0 :position "absolute" :z-index 1000}}]
-          (if @hovered?
+          (if (= id @hovered?)
             [:div
              {:class "uk-position-top"
               :style {:position "fixed"
@@ -744,16 +810,16 @@
                       :background "white"
                       :border "1px solid black"
                       :transform (if
-                                   (some #(= % start-top) [0 1 2 3 4])
+                                   (not (some #(= % start-left) [0]))
                                    (str "translate(" (if (or (= 0 start-left))
-                                                       (/ grid-width 3)
+                                                       (- 0 (/ grid-width 2))
                                                        (- 0 (/ grid-width 2)))
                                         "px, 0px)")
                                    (str "translate("
                                         (if (or (= 0 start-left))
-                                          (/ grid-width 3)
-                                          (- 0 (/ grid-width 2)))
-                                        "px, -100%)"))}}
+                                          (quot grid-width 3)
+                                          (quot grid-width 3))
+                                        "px, 0)"))}}
 
 
              [:div.uk-grid-collapse.uk-child-width-1-2
@@ -860,7 +926,7 @@
           [:div.black-bg.column-titles
            {:style {:display "flex"
                     :position "absolute"
-                    :z-index 2
+                    :z-index 2000
                     :transform (str "translateY(" (if @rect (if (> @last-scroll-pos (offset-top))
                                                               (- @last-scroll-pos (offset-top))
                                                               0)
@@ -941,7 +1007,7 @@
         height 2]
        ; p (.log js/console (str str-date" "@selected-date " "))]
     (reagent/create-class
-      {:component/did-unmount (.clearInterval js/window @interval)
+      {:component-did-unmount (.clearInterval js/window @interval)
        :component-did-mount #(reset! interval
                                      (.setInterval js/window (fn [a] (reset! elapsed-time (inc @elapsed-time)))
                                                              60000))
@@ -1331,8 +1397,11 @@
            [select-service editor-atom :service-id]]]
          [:div.uk-width-1-1.uk-flex.uk-flex-center.uk-margin-small-top.uk-margin-bottom
           [:div.uk-padding-small [:button.uk-button.res-cancel-button.rounded {:on-click #(no-fn)} "Mégsem"]]
-          [:div.uk-padding-small [:button.uk-button.res-save-button.rounded {:on-click #(yes-fn)}
-                                  "Mentés"]]]])})))
+          (if
+            (not= "nil" (:service-id @editor-atom))
+            [:div.uk-padding-small
+             [:button.uk-button.res-save-button.rounded {:on-click #(yes-fn)}
+              "Mentés"]])]])})))
 
 
 
@@ -1409,7 +1478,7 @@
                                 (get-el "sidebar")
                                 0.3
                                 (clj->js {:transform "translateX(-100%)"
-                                          :clearProps"transform"
+                                          :clearProps "transform"
                                           :onComplete (fn [a]
                                                         (set-gsap (get-el "sidebar") (clj->js {:width "0px"}))
                                                         (set-gsap (get-el "sidebar-inner") (clj->js {:left "-340px"})))}))))
